@@ -1,0 +1,524 @@
+C51 COMPILER V9.60.7.0   GL08_CONTROL                                                      11/11/2025 14:35:51 PAGE 1   
+
+
+C51 COMPILER V9.60.7.0, COMPILATION OF MODULE GL08_CONTROL
+OBJECT MODULE PLACED IN .\Objects\gl08_control.obj
+COMPILER INVOKED BY: D:\keil\C51\BIN\C51.EXE Src\gl08_control.c OPTIMIZE(8,SPEED) BROWSE INCDIR(.\Inc) DEBUG OBJECTEXTEN
+                    -D PRINT(.\Listings\gl08_control.lst) TABS(2) OBJECT(.\Objects\gl08_control.obj)
+
+line level    source
+
+   1          /*
+   2           * GL08 双通道控制板控制逻辑实现
+   3           * 包含调光控制、模式切换等核心控制功能
+   4           */
+   5          #include "type_def.h"
+   6          #include "gl08_control.h"
+   7          #include "gl08_hardware.h"
+   8          #include "uart.h"
+   9          
+  10          // Global control data
+  11          control_data_t control_data[2];    //双通道，两个单独的控制结构体
+  12          
+  13          // 辅助函数前向声明
+  14          uint16_t culculate_absolute_value(uint16_t value1, uint16_t value2);   // 计算两个无符号16位数的
+             -绝对值
+  15          
+  16          // 控制逻辑结构体初始化
+  17          void control_init(void) {
+  18   1        // control_data[0]控制第一路，链路为K1(波段旋钮1、ADC采样)、PWM1(输入捕获)、D1(PWM
+             -输出)；功率旋钮为共用
+  19   1        control_data[0].channel_value = 0;
+  20   1        control_data[0].control_mode = CONTROL_MODE_EXT;
+  21   1        control_data[0].power_limit = POWER_LIMIT_100;
+  22   1        control_data[0].band_position = BAND_EXT;
+  23   1        
+  24   1        // control_data[1]控制第一路，链路为K2(波段旋钮2、ADC采样)、PWM2(输入捕获)、D2(PWM�
+             -��出)；功率旋钮为共用
+  25   1        control_data[1].channel_value = 0;
+  26   1        control_data[1].control_mode = CONTROL_MODE_EXT;
+  27   1        control_data[1].power_limit = POWER_LIMIT_100;
+  28   1        control_data[1].band_position = BAND_EXT;
+  29   1        
+  30   1      }
+  31          
+  32          // 处理外部输入的 PWM 信号（波段档位为 EXT 时）
+  33          void process_external_pwm_inputs(void){
+  34   1      
+  35   1        static uint16_t raw_pwm1_duty = 0;
+  36   1        static uint16_t raw_pwm2_duty = 0;
+  37   1      
+  38   1        static uint16_t last_raw_pwm1_duty = 0;
+  39   1        static uint16_t last_raw_pwm2_duty = 0;
+  40   1      
+  41   1        static uint16_t current_pwm1_duty = 0;
+  42   1        static uint16_t current_pwm2_duty = 0;
+  43   1      
+  44   1        static uint16_t previous_pwm1_duty = 0;
+  45   1        static uint16_t previous_pwm2_duty = 0;
+  46   1      
+  47   1        static uint8_t pwm1_same_value_count= 0;
+  48   1        static uint8_t pwm2_same_value_count= 0;
+  49   1      
+  50   1        static uint8_t pwm1_level_off_flag = 0;
+  51   1        static uint8_t pwm2_level_off_flag = 0;
+C51 COMPILER V9.60.7.0   GL08_CONTROL                                                      11/11/2025 14:35:51 PAGE 2   
+
+  52   1      
+  53   1        static uint8_t pwm1_filter_count = 0;
+  54   1        static uint8_t pwm2_filter_count = 0;
+  55   1      
+  56   1        // 通道1为外部处理模式
+  57   1        if (control_data[0].control_mode == CONTROL_MODE_EXT)
+  58   1        {
+  59   2          raw_pwm1_duty = get_pwm_ic_duty(PWM1);   // 获取 PWM1 的占空比（未处理值）
+  60   2      
+  61   2          if (culculate_absolute_value(raw_pwm1_duty, current_pwm1_duty) >= 50)   //认定为新值，外部发�
+             -��档位变化
+  62   2          {
+  63   3            current_pwm1_duty = raw_pwm1_duty;
+  64   3            pwm1_level_off_flag = 0;
+  65   3          }
+  66   2          else if(pwm1_level_off_flag == 0)
+  67   2          {
+  68   3            if (culculate_absolute_value(raw_pwm1_duty, last_raw_pwm1_duty) == 0)
+  69   3            {
+  70   4              pwm1_same_value_count++;
+  71   4            }
+  72   3            else
+  73   3              pwm1_same_value_count = 0;
+  74   3      
+  75   3            if (pwm1_same_value_count >= 3) // 连续捕获三次相同值，认为已达到平稳转态，直�
+             -�按捕获值输出
+  76   3            {
+  77   4              current_pwm1_duty = raw_pwm1_duty;
+  78   4              pwm1_level_off_flag = 1;
+  79   4            }
+  80   3      
+  81   3            if (pwm1_level_off_flag == 0)  // 开始滤波算法
+  82   3            {
+  83   4              uint16_t difference_value1;
+  84   4              uint16_t difference_value2;
+  85   4      
+  86   4              difference_value1 = culculate_absolute_value(current_pwm1_duty, raw_pwm1_duty);
+  87   4              difference_value2 = culculate_absolute_value(current_pwm1_duty, previous_pwm1_duty);
+  88   4      
+  89   4              if (pwm1_filter_count <= 10)
+  90   4              {
+  91   5                if (difference_value1 < 10)   //刚开始采样，去除掉不合理值后，将采样值置为�
+             -��信度更高的输入源
+  92   5                {
+  93   6                  current_pwm1_duty = 0.4*current_pwm1_duty + 0.6*raw_pwm1_duty;
+  94   6                }
+  95   5                else {
+  96   6      
+  97   6                  current_pwm1_duty = current_pwm1_duty;
+  98   6                  previous_pwm1_duty = previous_pwm1_duty;
+  99   6                }
+ 100   5                
+ 101   5                pwm1_filter_count++;
+ 102   5              }
+ 103   4              else{
+ 104   5      
+ 105   5                if (difference_value1 > difference_value2)  //当前值与采样值波动较大，采用先前�
+             -�滤波
+ 106   5                {
+ 107   6                  current_pwm1_duty = 0.5*current_pwm1_duty + 0.5*previous_pwm1_duty;
+ 108   6                }
+ 109   5                else current_pwm1_duty = 0.5*current_pwm1_duty + 0.5*raw_pwm1_duty;  //否则采用采样值滤�
+C51 COMPILER V9.60.7.0   GL08_CONTROL                                                      11/11/2025 14:35:51 PAGE 3   
+
+             -��
+ 110   5      
+ 111   5                previous_pwm1_duty = current_pwm1_duty;
+ 112   5                
+ 113   5              }
+ 114   4              
+ 115   4            }
+ 116   3      
+ 117   3          }
+ 118   2      
+ 119   2          last_raw_pwm1_duty = raw_pwm1_duty; 
+ 120   2          
+ 121   2          // 串口调试，可在gl08_config.h中通过宏 UART_PRINT 开启或关闭
+ 122   2          uart_sendstr("PWM1 input raw value:");
+ 123   2          uart_uint16(raw_pwm1_duty);
+ 124   2          uart_sentEnter();
+ 125   2          
+ 126   2          uart_sendstr("PWM1 input filter value:");
+ 127   2          uart_uint16(control_data[0].channel_value);
+ 128   2          uart_sentEnter();
+ 129   2          
+ 130   2          uart_sentEnter();
+ 131   2        }
+ 132   1      
+ 133   1        // 通道1为外部处理模式
+ 134   1        if (control_data[1].control_mode == CONTROL_MODE_EXT)
+ 135   1        {
+ 136   2          raw_pwm2_duty = get_pwm_ic_duty(PWM2);    // 获取 PWM2 的占空比（未处理值）
+ 137   2      
+ 138   2          if (culculate_absolute_value(raw_pwm2_duty, current_pwm2_duty) >= 100)   //认定为新值，外部发
+             -生档位变化
+ 139   2          {
+ 140   3            // last_raw_pwm2_duty = raw_pwm2_duty;
+ 141   3            current_pwm2_duty = raw_pwm2_duty;
+ 142   3            // previous_pwm2_duty = raw_pwm2_duty;
+ 143   3            pwm2_level_off_flag = 0;
+ 144   3          }
+ 145   2          else if(pwm2_level_off_flag == 0)
+ 146   2          {
+ 147   3            if (culculate_absolute_value(raw_pwm2_duty, last_raw_pwm2_duty) == 0)
+ 148   3            {
+ 149   4              pwm2_same_value_count++;
+ 150   4            }
+ 151   3            else
+ 152   3              pwm2_same_value_count = 0;
+ 153   3      
+ 154   3            if (pwm2_same_value_count >= 3) // 连续捕获三次相同值，认为已达到平稳转态，直�
+             -�按捕获值输出
+ 155   3            {
+ 156   4              current_pwm2_duty = raw_pwm2_duty;
+ 157   4              pwm2_level_off_flag = 1;
+ 158   4            }
+ 159   3      
+ 160   3            if (pwm2_level_off_flag == 0)  // 开始滤波算法
+ 161   3            {
+ 162   4              uint16_t difference_value1;
+ 163   4              uint16_t difference_value2;
+ 164   4      
+ 165   4              difference_value1 = culculate_absolute_value(current_pwm2_duty, raw_pwm2_duty);
+ 166   4              difference_value2 = culculate_absolute_value(current_pwm2_duty, previous_pwm2_duty);
+ 167   4      
+ 168   4              if (pwm2_filter_count <= 10)
+C51 COMPILER V9.60.7.0   GL08_CONTROL                                                      11/11/2025 14:35:51 PAGE 4   
+
+ 169   4              {
+ 170   5                if (difference_value1 < 10)   //刚开始采样，去除掉不合理值后，将采样值置为�
+             -��信度更高的输入源
+ 171   5                {
+ 172   6                  current_pwm2_duty = 0.4*current_pwm2_duty + 0.6*raw_pwm2_duty;
+ 173   6                }
+ 174   5                else {
+ 175   6      
+ 176   6                  current_pwm2_duty = current_pwm2_duty;
+ 177   6                  previous_pwm2_duty = previous_pwm2_duty;
+ 178   6                }
+ 179   5                
+ 180   5                pwm2_filter_count++;
+ 181   5              }
+ 182   4              else{
+ 183   5      
+ 184   5                if (difference_value1 > difference_value2)  //当前值与采样值波动较大，采用先前�
+             -�滤波
+ 185   5                {
+ 186   6                  current_pwm2_duty = 0.5*current_pwm2_duty + 0.5*previous_pwm2_duty;
+ 187   6                }
+ 188   5                else current_pwm2_duty = 0.5*current_pwm2_duty + 0.5*raw_pwm2_duty;  //否则采用采样值滤�
+             -��
+ 189   5      
+ 190   5                previous_pwm2_duty = current_pwm2_duty;
+ 191   5                
+ 192   5              }
+ 193   4              
+ 194   4            }
+ 195   3      
+ 196   3          }
+ 197   2           
+ 198   2          last_raw_pwm2_duty = raw_pwm2_duty; 
+ 199   2          
+ 200   2          // 串口调试，可在gl08_config.h中通过宏 UART_PRINT 开启或关闭
+ 201   2          uart_sendstr("PWM2 input raw value:");
+ 202   2          uart_uint16(raw_pwm2_duty);
+ 203   2          uart_sentEnter();
+ 204   2          
+ 205   2          uart_sendstr("PWM2 input filter value:");
+ 206   2          uart_uint16(control_data[1].channel_value);
+ 207   2          uart_sentEnter();
+ 208   2          
+ 209   2          uart_sentEnter();
+ 210   2        }
+ 211   1        // External panel control mode
+ 212   1        control_data[0].channel_value = current_pwm1_duty;   // 更新当前占空比值到控制字
+ 213   1        control_data[1].channel_value = current_pwm2_duty;
+ 214   1        
+ 215   1      }
+ 216          
+ 217          // 处理获取到的波段档位信息
+ 218          void process_band_switch(void) {
+ 219   1        
+ 220   1        control_data[0].band_position= band_switch_1_pos;
+ 221   1        control_data[1].band_position = band_switch_2_pos;
+ 222   1      
+ 223   1        // 基于波段档位1（K1）设置通道1的控制模式
+ 224   1        if (control_data[0].band_position  == BAND_EXT) {
+ 225   2          control_data[0].control_mode = CONTROL_MODE_EXT;
+ 226   2          pwma_ic1_start();
+ 227   2          EABLE_TIMER0();
+C51 COMPILER V9.60.7.0   GL08_CONTROL                                                      11/11/2025 14:35:51 PAGE 5   
+
+ 228   2        } else {
+ 229   2          control_data[0].control_mode = CONTROL_MODE_LOCAL;
+ 230   2          pwma_ic1_stop();
+ 231   2          DISABLE_TIMER0();
+ 232   2        }
+ 233   1      
+ 234   1        // 基于波段档位2（K2）设置通道2的控制模式
+ 235   1        if (control_data[1].band_position == BAND_EXT) {
+ 236   2          control_data[1].control_mode = CONTROL_MODE_EXT;
+ 237   2          pwma_ic2_start();
+ 238   2          EABLE_TIMER1();
+ 239   2        } else {
+ 240   2          control_data[1].control_mode = CONTROL_MODE_LOCAL;
+ 241   2          pwma_ic2_stop();
+ 242   2          DISABLE_TIMER1();
+ 243   2        }
+ 244   1        
+ 245   1        // 串口调试，可在gl08_config.h中通过宏 UART_PRINT 开启或关闭
+ 246   1        uart_sendstr("band1 control mode:");
+ 247   1        uart_uint8(control_data[0].control_mode);
+ 248   1        uart_sentEnter();
+ 249   1        
+ 250   1        uart_sendstr("band2 control mode:");
+ 251   1        uart_uint8(control_data[1].control_mode);
+ 252   1        uart_sentEnter();
+ 253   1        
+ 254   1        uart_sentEnter();
+ 255   1      }
+ 256          
+ 257          // 处理获取到的功率档位信息
+ 258          void process_power_switch(void) { 
+ 259   1      
+ 260   1        control_data[0].power_limit = power_switch_pos; 
+ 261   1        control_data[1].power_limit = power_switch_pos;
+ 262   1        
+ 263   1        // 串口调试，可在gl08_config.h中通过宏 UART_PRINT 开启或关闭
+ 264   1        uart_sendstr("power_limit:");
+ 265   1        uart_uint8(control_data[0].power_limit);
+ 266   1        uart_sentEnter();
+ 267   1        
+ 268   1        uart_sentEnter();
+ 269   1      }
+ 270          
+ 271          // 更新通道输出
+ 272          void update_outputs(void) {
+ 273   1      
+ 274   1        uint16_t ch1_output, ch2_output;
+ 275   1      
+ 276   1        // Calculate output values
+ 277   1        ch1_output = calculate_output_value(GL08_CH1);
+ 278   1        ch2_output = calculate_output_value(GL08_CH2);
+ 279   1      
+ 280   1        // Apply power limit
+ 281   1        apply_power_limit(GL08_CH1,&ch1_output);
+ 282   1        apply_power_limit(GL08_CH2,&ch2_output);
+ 283   1      
+ 284   1        // Set outputs  
+ 285   1        set_pwm_duty(GL08_CH1, ch1_output);
+ 286   1        set_pwm_duty(GL08_CH2, ch2_output);
+ 287   1        
+ 288   1        // 串口调试，可在gl08_config.h中通过宏 UART_PRINT 开启或关闭
+ 289   1        uart_sendstr("ch1 output:");
+C51 COMPILER V9.60.7.0   GL08_CONTROL                                                      11/11/2025 14:35:51 PAGE 6   
+
+ 290   1        uart_uint16(ch1_output);
+ 291   1        uart_sentEnter();
+ 292   1        
+ 293   1        uart_sendstr("ch2 output:");
+ 294   1        uart_uint16(ch2_output);
+ 295   1        uart_sentEnter();
+ 296   1        
+ 297   1        uart_sendstr("====== output end ======\r\n");
+ 298   1        
+ 299   1        uart_sentEnter();
+ 300   1      
+ 301   1      
+ 302   1      }
+ 303          
+ 304          // 应用功率限制
+ 305          void apply_power_limit(uint8_t gl08_channel, uint16_t *value) {
+ 306   1        
+ 307   1        uint8_t band_mode = get_control_mode(gl08_channel);
+ 308   1      
+ 309   1        if (band_mode == CONTROL_MODE_LOCAL)
+ 310   1        {
+ 311   2          switch (control_data[gl08_channel-1].power_limit)
+ 312   2          {
+ 313   3          case POWER_LIMIT_67:
+ 314   3            *value = (uint16_t)((uint32_t)(*value) * 667 / 1000);   // 档位1，66.7%
+ 315   3            break;
+ 316   3          case POWER_LIMIT_83:
+ 317   3            *value = (uint16_t)((uint32_t)(*value) * 833 / 1000);   // 档位2，88.3%
+ 318   3            break;
+ 319   3          case POWER_LIMIT_100:   // 档位3，100%
+ 320   3          default:
+ 321   3            // No power limit
+ 322   3            break;
+ 323   3          }
+ 324   2        }
+ 325   1      }
+ 326          
+ 327          // 设置通道控制模式
+ 328          void set_control_mode(uint8_t gl08_channel, uint8_t mode){
+ 329   1        
+ 330   1        if (gl08_channel == GL08_CH1) {
+ 331   2        
+ 332   2          if (mode <= CONTROL_MODE_EXT) {
+ 333   3            control_data[0].control_mode = mode;
+ 334   3          }
+ 335   2        }
+ 336   1        else if (gl08_channel == GL08_CH2){
+ 337   2          
+ 338   2            if (mode <= CONTROL_MODE_EXT) {
+ 339   3            control_data[1].control_mode = mode;
+ 340   3          }
+ 341   2        }
+ 342   1      }
+ 343          
+ 344          // 获取通道控制模式
+ 345          uint8_t get_control_mode(uint8_t gl08_channel) {
+ 346   1        
+ 347   1        uint8_t band_mode = 0;
+ 348   1        
+ 349   1        if (gl08_channel == GL08_CH1)
+ 350   1        {
+ 351   2          band_mode = control_data[0].control_mode;
+C51 COMPILER V9.60.7.0   GL08_CONTROL                                                      11/11/2025 14:35:51 PAGE 7   
+
+ 352   2        }
+ 353   1        else if (gl08_channel == GL08_CH2)
+ 354   1        {
+ 355   2          band_mode = control_data[1].control_mode;
+ 356   2        }
+ 357   1        
+ 358   1         return band_mode; 
+ 359   1      }
+ 360          
+ 361          // 计算通道PWM输出值
+ 362          uint16_t calculate_output_value(uint8_t pwm_channel) {
+ 363   1        
+ 364   1        uint16_t output_value = 0;
+ 365   1        uint8_t band_mode = 0;
+ 366   1      
+ 367   1        band_mode = get_control_mode(pwm_channel);
+ 368   1      
+ 369   1        switch (band_mode) {
+ 370   2        case CONTROL_MODE_LOCAL:
+ 371   2          // Local band switch control
+ 372   2          output_value = apply_band_setting(pwm_channel, PWM_FREQUENCY); // Base PWM_FREQUENCY(1000) value
+ 373   2          break;
+ 374   2      
+ 375   2        case CONTROL_MODE_EXT:
+ 376   2          // External panel control
+ 377   2          if (pwm_channel == D1) {
+ 378   3            output_value = control_data[0].channel_value;
+ 379   3          } 
+ 380   2          else if(pwm_channel == D2){
+ 381   3            output_value = control_data[1].channel_value;
+ 382   3          }
+ 383   2          break;
+ 384   2      
+ 385   2        default:
+ 386   2          output_value = 0;
+ 387   2          break;
+ 388   2        }
+ 389   1      
+ 390   1        return output_value;
+ 391   1      }
+ 392          
+ 393          // Apply band setting
+ 394          uint16_t apply_band_setting(uint8_t band_switch, uint16_t input_value) {
+ 395   1      
+ 396   1        static uint16_t output_value = 0;
+ 397   1        uint8_t band_poition = 0;
+ 398   1      
+ 399   1        if (band_switch == K1)
+ 400   1        {
+ 401   2          band_poition = control_data[0].band_position;
+ 402   2        }
+ 403   1        else if (band_switch == K2)
+ 404   1        {
+ 405   2          band_poition = control_data[1].band_position;
+ 406   2        }
+ 407   1      
+ 408   1        switch (band_poition) {
+ 409   2        case BAND_0:
+ 410   2          output_value = input_value * 0; // 0%
+ 411   2          break;
+ 412   2      
+ 413   2        case BAND_25:
+C51 COMPILER V9.60.7.0   GL08_CONTROL                                                      11/11/2025 14:35:51 PAGE 8   
+
+ 414   2          output_value = input_value / 4; // 25%
+ 415   2          break;
+ 416   2      
+ 417   2        case BAND_50:
+ 418   2          output_value = input_value / 2; // 50%
+ 419   2          break;
+ 420   2      
+ 421   2        case BAND_75:
+ 422   2          output_value = input_value * 3 / 4; // 75%
+ 423   2          break;
+ 424   2      
+ 425   2        case BAND_100:
+ 426   2          output_value = input_value; // 100%
+ 427   2          break;
+ 428   2      
+ 429   2        case BAND_EXT:
+ 430   2        default:
+ 431   2          output_value = output_value; // 档位未知，保持上次输出
+ 432   2          break;
+ 433   2        }
+ 434   1      
+ 435   1        return output_value;
+ 436   1      }
+ 437          
+ 438          // 开始 ADC 转换，采集各个旋钮（波段、功率）的档位信息
+ 439          void collect_inputs(void){
+ 440   1      
+ 441   1        adc_values[ADC_CH1] = start_adc_conversion(BAND_SWITCH_1, CONSECUTIVE_CONV);
+ 442   1        adc_values[ADC_CH2] = start_adc_conversion(BAND_SWITCH_2, CONSECUTIVE_CONV);
+ 443   1        adc_values[ADC_CH3] = start_adc_conversion(POWER_SWITCH, CONSECUTIVE_CONV);
+ 444   1      
+ 445   1        // 串口调试，可在gl08_config.h中通过宏 UART_PRINT 开启或关闭
+ 446   1        uart_sendstr("band1 raw adc_value(0~1023):");
+ 447   1        uart_uint16(adc_values[ADC_CH1]);
+ 448   1        uart_sentEnter();
+ 449   1        
+ 450   1        uart_sendstr("band2 raw adc_value(0~1023):");
+ 451   1        uart_uint16(adc_values[ADC_CH2]);
+ 452   1        uart_sentEnter();
+ 453   1        
+ 454   1        uart_sendstr("power raw adc_value(0~1023):");
+ 455   1        uart_uint16(adc_values[ADC_CH3]);
+ 456   1        uart_sentEnter();
+ 457   1        
+ 458   1        uart_sentEnter();
+ 459   1      }
+ 460          
+ 461          // 计算两数的差值（绝对值）
+ 462          uint16_t culculate_absolute_value(uint16_t value1, uint16_t value2){
+ 463   1      
+ 464   1        if (value1 > value2)
+ 465   1        {
+ 466   2          return value1 - value2;
+ 467   2        }
+ 468   1      
+ 469   1        return value2 -value1;
+ 470   1          
+ 471   1      }
+
+
+MODULE INFORMATION:   STATIC OVERLAYABLE
+   CODE SIZE        =   1371    ----
+C51 COMPILER V9.60.7.0   GL08_CONTROL                                                      11/11/2025 14:35:51 PAGE 9   
+
+   CONSTANT SIZE    =    285    ----
+   XDATA SIZE       =   ----    ----
+   PDATA SIZE       =   ----    ----
+   DATA SIZE        =     34      13
+   IDATA SIZE       =   ----    ----
+   BIT SIZE         =   ----    ----
+END OF MODULE INFORMATION.
+
+
+C51 COMPILATION COMPLETE.  0 WARNING(S),  0 ERROR(S)

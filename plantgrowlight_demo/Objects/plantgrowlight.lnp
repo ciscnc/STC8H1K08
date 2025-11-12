@@ -1,0 +1,7 @@
+".\Objects\gl08_control.obj",
+".\Objects\gl08_hardware.obj",
+".\Objects\main.obj",
+".\Objects\delay.obj",
+".\Objects\uart.obj" 
+TO ".\Objects\plantgrowlight" 
+PRINT(".\Listings\plantgrowlight.m51") RAMSIZE(256) 
