@@ -1,0 +1,14 @@
+# Keil MDK directory
+MDK/
+
+# VS Code directory
+.vscode/
+
+# Windows
+Thumbs.db
+desktop.ini
+
+# Backup files
+*~
+*.bak
+*.swp
