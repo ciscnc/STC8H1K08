@@ -31,11 +31,4 @@ uint16_t apply_band_setting(uint8_t band_switch, uint16_t input_value);
 // Input collecting function
 void collect_inputs(void);
 
-// External variable declarations
-extern volatile uint8_t band_switch_1_pos;
-extern volatile uint8_t band_switch_2_pos;
-extern volatile uint8_t power_switch_pos;
-
-extern volatile uint16_t adc_values[3];
-
-#endif // __GL08_CONTROL_H__
+#endif  // __GL08_CONTROL_H__

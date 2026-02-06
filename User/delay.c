@@ -6,11 +6,11 @@
 #include "delay.h"
 
 // 延时函数，单位：ms （绝对延时）
-void delay_ms(uint16_t ms)
-{
-	unsigned int i;
-	do{
-		i = FOSC / 10000;
-		while(--i);
-	}while(--ms);
+void delay_ms(uint16_t ms) {
+    unsigned int i;
+    do {
+        i = FOSC / 10000;
+        while (--i)
+            ;
+    } while (--ms);
 }

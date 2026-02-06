@@ -22,4 +22,4 @@ void uart_sendstr(const uint8_t *str);
 uint8_t uart_recv(void);
 uint8_t uarthasdata(void);
 
-#endif // __UART_H__
+#endif  // __UART_H__
