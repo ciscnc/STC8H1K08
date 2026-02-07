@@ -1,20 +1,28 @@
-/*
- * GL08 旋钮档位模块头文件
+/**
+ * @file gl08_switch.h
+ * @brief 旋钮档位模块头文件，实现波段旋钮和功率旋钮的档位读取
+ *
+ * @date 2026-02-07
  */
-
 #ifndef __GL08_SWITCH_H__
 #define __GL08_SWITCH_H__
 
 #include "gl08_config.h"
 
-// 函数声明
-uint8_t read_band_switch(uint8_t band_switch);
-uint8_t read_power_switch(void);
-void scan_switches(void);
+/**
+ * @brief 波段档位判定函数
+ *
+ * @param voltage 输入电压值（单位：mV）
+ * @return 波段档位
+ */
+uint8_t determine_band_position(uint16_t voltage);
 
-// 全局变量声明
-extern volatile uint8_t band_switch_1_pos;
-extern volatile uint8_t band_switch_2_pos;
-extern volatile uint8_t power_switch_pos;
+/**
+ * @brief 功率档位判定函数
+ *
+ * @param voltage 输入电压值（单位：mV）
+ * @return 功率档位
+ */
+uint8_t determine_power_position(uint16_t voltage);
 
-#endif  // __GL08_SWITCH_H__
+#endif /* __GL08_SWITCH_H__ */

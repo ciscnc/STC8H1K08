@@ -14,7 +14,7 @@
 
 // 系统配置
 #define FOSC 24000000UL  // 系统时钟频率
-#define BAUD 9600        // 串口波特率
+#define BAUD 115200        // 串口波特率
 #define BRT (65536 - (FOSC / BAUD + 2) / 4)
 
 #define UART_PRINT 1  // 串口调试打印，1使能串口打印
@@ -22,16 +22,6 @@
 // GL08 双通道
 #define GL08_CH1 1  // 通道1，对应链路为波段旋钮1（K1）、PWM1、D1
 #define GL08_CH2 2  // 通道2，对应链路为波段旋钮2（K2）、PWM2、D2
-
-// Timer 配置
-#define TIMER0_RELOAD_H ((65536 - FOSC / 12 / 2000) >> 8)  // Timer0 2ms 定时器
-#define TIMER0_RELOAD_L ((65536 - FOSC / 12 / 2000) & 0xFF)
-
-#define TIMER1_RELOAD_H ((65536 - FOSC / 12 / 2000) >> 8)  // Timer1 2ms 定时器
-#define TIMER1_RELOAD_L ((65536 - FOSC / 12 / 2000) & 0xFF)
-
-#define TIMER2_RELOAD_H ((65536 - FOSC / 12 / 2000) >> 8)  // Timer2 1ms 定时器
-#define TIMER2_RELOAD_L ((65536 - FOSC / 12 / 2000) & 0xFF)
 
 // PWMB配置，用于输出周期固定，占空比变化的PWM波
 #define PWMB_PSC (24 - 1)  // 定义 PWMB 时钟预分频系数
@@ -47,7 +37,6 @@
 #define PWM2 GL08_CH2      // PWM3P，端口P1.4， 与原理图对应
 
 #define PWM_FREQUENCY PWMB_PERIOD  // PWM frequency 1kHz
-
 
 // ADC相关宏定义，用于采集2个波段旋钮和功率旋钮档位电压
 #define ADC_CHANNELS 3       // Number of ADC channels
@@ -84,7 +73,12 @@
 #define POWER_SWITCH_2_VOLGATE 3000  // 2档波段电压值：  3V = 3000mv，83.3%
 #define POWER_SWITCH_3_VOLGATE 4600  // 3档波段电压值：4.6V = 4600mv，100%
 
-#define OLLOW_VOLGATE_DIFFERENCE_VALUE 200  // 允许的电压误差值：200mv
+#define BAND_SWITCH_ERR_VOLGATE  200  // 波段档位允许的电压误差值：200mv
+#define POWER_SWITCH_ERR_VOLGATE 200  // 功率档位允许的电压误差值：200mv
+
+// 窗口判断宏：判断value与target的差值是否在window范围内
+#define IN_WINDOW(value, target, window) \
+    ((uint16_t)((value) > (target) ? (value) - (target) : (target) - (value)) <= (window))
 
 // PWM output pin operations
 #define PWM_OUT1_SET() (P3 |= (1 << 3))
@@ -105,6 +99,7 @@
 #define DISABLE_TIMER1() TR1 = 0
 
 // Band switch position definitions
+#define BAND_NONE 0   // No valid band position detected
 #define BAND_EXT 1  // External control mode
 #define BAND_0 2    // 0% output
 #define BAND_25 3   // 25% output
@@ -113,6 +108,7 @@
 #define BAND_100 6  // 100% output
 
 // Power limit switch position definitions
+#define POWER_LIMIT_NONE 0  // No valid power limit position detected
 #define POWER_LIMIT_67 1   // 66.7% power limit
 #define POWER_LIMIT_83 2   // 83.3% power limit
 #define POWER_LIMIT_100 3  // 100% power limit
@@ -120,13 +116,5 @@
 // Control mode definitions
 #define CONTROL_MODE_LOCAL 0  // Local control mode
 #define CONTROL_MODE_EXT 1    // External panel control mode
-
-// Data type definitions
-typedef struct {
-    uint16_t channel_value;  // Channel output value (0-1000)
-    uint8_t control_mode;    // Control mode
-    uint8_t power_limit;     // Power limit
-    uint8_t band_position;   // Band switch position
-} control_data_t;
 
 #endif  // __GL08_CONFIG_H__

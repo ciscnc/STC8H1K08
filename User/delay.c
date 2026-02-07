@@ -1,16 +1,24 @@
-/*
- * STC8H1K08 系统延时功能实现
- * 目前只实现毫秒级别的绝对延时函数
+/**
+ * @file delay.c
+ * @brief 系统延时功能实现
+ *
+ * @date 2026-02-07
  */
-
 #include "delay.h"
+#include "STC8H.h"
 
-// 延时函数，单位：ms （绝对延时）
+// 微秒延时，单位：us
+void delay_us(uint16_t us) {
+    while (us--) {
+        // 24MHz主频，1机器周期 = 12/24 = 0.5us
+        // 延时1us约需2个NOP指令，使用STC8H.H中的NOP4()宏
+        NOP4();
+    }
+}
+
+// 毫秒延时，单位：ms
 void delay_ms(uint16_t ms) {
-    unsigned int i;
-    do {
-        i = FOSC / 10000;
-        while (--i)
-            ;
-    } while (--ms);
+    while (ms--) {
+        delay_us(1000);
+    }
 }

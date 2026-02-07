@@ -1,24 +1,24 @@
-/*
- * GL08 Timer 模块
- * 负责定时器初始化和中断处理
+/**
+ * @file gl08_timer.c
+ * @brief 定时器模块实现
+ *
+ * @date 2026-02-07
  */
-
 #include "STC8H.h"
 #include "gl08_timer.h"
-#include "gl08_pwm.h"
+#include "task.h"
+
+// Timer 配置
+#define TIMER0_RELOAD_H ((65536 - FOSC / 12 / 2000) >> 8)  // Timer0 2ms 定时器
+#define TIMER0_RELOAD_L ((65536 - FOSC / 12 / 2000) & 0xFF)
+
+#define TIMER1_RELOAD_H ((65536 - FOSC / 12 / 1000) >> 8)  // Timer1 1ms 定时器
+#define TIMER1_RELOAD_L ((65536 - FOSC / 12 / 1000) & 0xFF)
 
 // Timer 初始化
 void timer_init(void) {
-    // 配置 Timer0 and Timer1 为 2ms 触发溢出中断，用于检测 PWM 0% 和 100% 的输入情况
-    TMOD = 0x00;  // Timer0 and Timer1 both works in mode 0
-    TH0 = TIMER0_RELOAD_H;
-    TL0 = TIMER0_RELOAD_L;
-
-    // Enable Timer0 interrupt
-    ET0 = 1;
-
-    // Start Timer0
-    TR0 = 1;
+    // Timer1 为 1ms 触发溢出中断
+    TMOD = 0x00;  // Timer1 works in mode 0
 
     TL1 = TIMER1_RELOAD_H;
     TH1 = TIMER1_RELOAD_L;
@@ -30,30 +30,8 @@ void timer_init(void) {
     TR1 = 1;
 }
 
-// Timer0 中断服务函数
-void timer0_isr(void) interrupt 1 {
-    TF0 = 0;  // 清除定时器0溢出中断标志
-
-    // 在中断中关闭定时器0
-    DISABLE_TIMER0();
-
-    if (READ_PWM1_INPUT()) {  // 检测PWM1输入引脚P1.0电平值
-        pwm1_duty = 1000;
-    } else {
-        pwm1_duty = 0;
-    }
-}
-
 // Timer1 中断服务函数
 void Timer1_ISR(void) interrupt 3 {
-    TF1 = 0;  // 清除定时器1溢出中断标志
-
-    // 在中断中关闭定时器1
-    DISABLE_TIMER1();
-
-    if (READ_PWM2_INPUT()) {  // 检测PWM2输入引脚P1.4电平值
-        pwm2_duty = 1000;
-    } else {
-        pwm2_duty = 0;
-    }
+    TF1 = 0;                        // 清除定时器1溢出中断标志
+    Task_Marks_Handler_Callback();  // 调用任务标记回调函数
 }

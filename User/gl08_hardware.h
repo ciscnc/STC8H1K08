@@ -1,7 +1,9 @@
-/*
- * GL08 双通道控制板硬件驱动头文件
+/**
+ * @file gl08_hardware.h
+ * @brief 硬件驱动头文件，包含各硬件模块的统一引用
+ *
+ * @date 2026-02-07
  */
-
 #ifndef __GL08_HARDWARE_H__
 #define __GL08_HARDWARE_H__
 
@@ -15,4 +17,4 @@
 #include "gl08_switch.h"
 #include "gl08_system.h"
 
-#endif  // __GL08_HARDWARE_H__
+#endif /* __GL08_HARDWARE_H__ */

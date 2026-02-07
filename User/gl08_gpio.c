@@ -1,8 +1,9 @@
-/*
- * GL08 GPIO 模块
- * 负责 GPIO 初始化和操作
+/**
+ * @file gl08_gpio.c
+ * @brief GPIO模块实现
+ *
+ * @date 2026-02-07
  */
-
 #include "STC8H.h"
 #include "gl08_gpio.h"
 

@@ -6,424 +6,222 @@
 #include "gl08_control.h"
 #include "gl08_hardware.h"
 #include "gl08_switch.h"
+#include "gl08_adc.h"
+#include "gl08_pwm.h"
+#include "filter.h"
 #include "uart.h"
 
-// Global control data
-control_data_t control_data[2];  // 双通道，两个单独的控制结构体
+// PWM滤波参数
+#define PWM_FILTER_DIE      10   // 滤波死区阈值
+#define PWM_FILTER_MAX_ERR   100  // 滤波限幅阈值
+#define PWM_FILTER_N         4    // 滤波长度N
+#define PWM_OUTPUT_THRESHOLD  5    // 输出抖动阈值
 
-// 辅助函数前向声明
-uint16_t culculate_absolute_value(uint16_t value1,
-                                  uint16_t value2);  // 计算两个无符号16位数的绝对值
+// 输出窗口判断宏：判断输出值和当前值的差值是否超过阈值
+#define OUTPUT_NEED_UPDATE(current, output, threshold) \
+    ((uint16_t)((output) > (current) ? (output) - (current) : (current) - (output)) >= (threshold))
+
+// 控制通道数量枚举
+typedef enum {
+    GL08_CHANNEL1 = 0,
+    GL08_CHANNEL2,
+    MAX_CHANNEL
+} gl08_channel_t;
+
+// 控制状态结构体
+typedef struct {
+    uint16_t input_value;    // PWM输入值
+    uint16_t output_value;   // PWM输出值
+    uint8_t band_position;   // 波段位置
+    uint8_t control_mode;    // 控制模式
+    uint8_t power_limit;     // 功率限制档位
+} control_state_t;
+
+// Global control data
+control_state_t control_state[MAX_CHANNEL];  // 双通道，两个单独的控制结构体
+
+// PWM捕获滤波器数组
+static ewma_filter_t pwm_filters[MAX_CHANNEL];
+
+// 上次控制模式，用于检测模式切换
+static uint8_t last_control_mode[MAX_CHANNEL];
+
+// 内部函数声明
+static uint16_t apply_power_limit(uint8_t power_limit, uint16_t value);
+static uint16_t apply_band_setting(uint8_t band_position, uint16_t range);
 
 // 控制逻辑结构体初始化
 void control_init(void) {
-    // control_data[0]控制第一路，链路为K1(波段旋钮1、ADC采样)、PWM1(输入捕获)、D1(PWM输出)；功率旋钮为共用
-    control_data[0].channel_value = 0;
-    control_data[0].control_mode = CONTROL_MODE_EXT;
-    control_data[0].power_limit = POWER_LIMIT_100;
-    control_data[0].band_position = BAND_EXT;
+    uint8_t i;
 
-    // control_data[1]控制第一路，链路为K2(波段旋钮2、ADC采样)、PWM2(输入捕获)、D2(PWM输出)；功率旋钮为共用
-    control_data[1].channel_value = 0;
-    control_data[1].control_mode = CONTROL_MODE_EXT;
-    control_data[1].power_limit = POWER_LIMIT_100;
-    control_data[1].band_position = BAND_EXT;
+    // 初始化PWM滤波器和控制数据
+    for (i = 0; i < MAX_CHANNEL; i++) {
+        ewma_filter_init(true, 0, PWM_FILTER_N, &pwm_filters[i]);
+        control_state[i].input_value = 0;
+        control_state[i].output_value = 0;
+        control_state[i].control_mode = CONTROL_MODE_EXT;
+        control_state[i].power_limit = POWER_LIMIT_100;
+        control_state[i].band_position = BAND_EXT;
+        last_control_mode[i] = CONTROL_MODE_EXT;
+    }
 }
 
-// 处理外部输入的 PWM 信号（波段档位为 EXT 时）
-void process_external_pwm_inputs(void) {
-    static uint16_t raw_pwm1_duty = 0;
-    static uint16_t raw_pwm2_duty = 0;
+// 第一次启动转换
+void first_start_conversion(void) {
+    adc_start_conversion();
+    pwma_ic1_start();
+    pwma_ic2_start();
+}
 
-    static uint16_t last_raw_pwm1_duty = 0;
-    static uint16_t last_raw_pwm2_duty = 0;
+// 控制任务主循环
+void control_task(void) {
+    uint16_t adc_raw;
+    uint16_t voltage;
+    uint16_t capture_raw;
+    uint16_t pwm_value;
+    uint8_t i;
 
-    static uint16_t current_pwm1_duty = 0;
-    static uint16_t current_pwm2_duty = 0;
+#if UART_PRINT
+    uart_sendstr("====== control task ======\r\n");
+#endif
 
-    static uint16_t previous_pwm1_duty = 0;
-    static uint16_t previous_pwm2_duty = 0;
+    // 获取波段1 ADC值并转换为档位
+    adc_raw = adc_get_raw_value(BAND_K1_ADC_CHANNEL);
+    if (adc_raw != ADC_NOT_READY) {
+        voltage = adc_to_voltage(adc_raw);
+        control_state[GL08_CHANNEL1].band_position = determine_band_position(voltage);
+#if UART_PRINT
+        uart_print_u16("band1 voltage(mv):", voltage);
+        uart_print_u8("band1 pos:", control_state[GL08_CHANNEL1].band_position);
+#endif
+    }
 
-    static uint8_t pwm1_same_value_count = 0;
-    static uint8_t pwm2_same_value_count = 0;
+    // 获取波段2 ADC值并转换为档位
+    adc_raw = adc_get_raw_value(BAND_K2_ADC_CHANNEL);
+    if (adc_raw != ADC_NOT_READY) {
+        voltage = adc_to_voltage(adc_raw);
+        control_state[GL08_CHANNEL2].band_position = determine_band_position(voltage);
+#if UART_PRINT
+        uart_print_u16("band2 voltage(mv):", voltage);
+        uart_print_u8("band2 pos:", control_state[GL08_CHANNEL2].band_position);
+#endif
+    }
 
-    static uint8_t pwm1_level_off_flag = 0;
-    static uint8_t pwm2_level_off_flag = 0;
+    // 获取功率旋钮ADC值并转换为档位
+    adc_raw = adc_get_raw_value(POWER_ADC_CHANNEL);
+    if (adc_raw != ADC_NOT_READY) {
+        voltage = adc_to_voltage(adc_raw);
+        control_state[GL08_CHANNEL1].power_limit = determine_power_position(voltage);
+        control_state[GL08_CHANNEL2].power_limit = determine_power_position(voltage);
+#if UART_PRINT
+        uart_print_u16("power voltage(mv):", voltage);
+        uart_print_u8("power limit:", control_state[GL08_CHANNEL1].power_limit);
+#endif
+    }
 
-    static uint8_t pwm1_filter_count = 0;
-    static uint8_t pwm2_filter_count = 0;
-
-    // 通道1为外部处理模式
-    if (control_data[0].control_mode == CONTROL_MODE_EXT) {
-        raw_pwm1_duty = get_pwm_ic_duty(PWM1);  // 获取 PWM1 的占空比（未处理值）
-
-        if (culculate_absolute_value(raw_pwm1_duty, current_pwm1_duty) >=
-            50)  // 认定为新值，外部发生档位变化
-        {
-            current_pwm1_duty = raw_pwm1_duty;
-            pwm1_level_off_flag = 0;
-        } else if (pwm1_level_off_flag == 0) {
-            if (culculate_absolute_value(raw_pwm1_duty, last_raw_pwm1_duty) == 0) {
-                pwm1_same_value_count++;
-            } else
-                pwm1_same_value_count = 0;
-
-            if (pwm1_same_value_count >=
-                3)  // 连续捕获三次相同值，认为已达到平稳转态，直接按捕获值输出
-            {
-                current_pwm1_duty = raw_pwm1_duty;
-                pwm1_level_off_flag = 1;
+    // 处理两个通道
+    for (i = 0; i < MAX_CHANNEL; i++) {
+        if (control_state[i].band_position == BAND_EXT) {
+            // 外部控制模式：获取PWM捕获值
+            if (i == GL08_CHANNEL1) {
+                capture_raw = get_pwm_ic_duty(PWM1);
+            } else {
+                capture_raw = get_pwm_ic_duty(PWM2);
             }
 
-            if (pwm1_level_off_flag == 0)  // 开始滤波算法
-            {
-                uint16_t difference_value1;
-                uint16_t difference_value2;
+            // 检测从本地模式切换到外部模式，复位滤波器
+            if (last_control_mode[i] != CONTROL_MODE_EXT && capture_raw != PWM_CAPTURE_NOT_READY) {
+                ewma_filter_reset(&pwm_filters[i], capture_raw);
+                last_control_mode[i] = CONTROL_MODE_EXT;
+#if UART_PRINT
+                uart_sendstr("mode switch to EXT, reset filter\r\n");
+#endif
+            }
 
-                difference_value1 = culculate_absolute_value(current_pwm1_duty, raw_pwm1_duty);
-                difference_value2 = culculate_absolute_value(current_pwm1_duty, previous_pwm1_duty);
-
-                if (pwm1_filter_count <= 10) {
-                    if (difference_value1 <
-                        10)  // 刚开始采样，去除掉不合理值后，将采样值置为置信度更高的输入源
-                    {
-                        current_pwm1_duty = 0.4 * current_pwm1_duty + 0.6 * raw_pwm1_duty;
-                    } else {
-                        current_pwm1_duty = current_pwm1_duty;
-                        previous_pwm1_duty = previous_pwm1_duty;
-                    }
-
-                    pwm1_filter_count++;
+            if (capture_raw != PWM_CAPTURE_NOT_READY) {
+                // 滤波处理
+                control_state[i].input_value = ewma_filter_update(true, capture_raw, PWM_FILTER_DIE,
+                                                              PWM_FILTER_MAX_ERR, &pwm_filters[i]);
+#if UART_PRINT
+                if (i == GL08_CHANNEL1) {
+                    uart_print_u16("pwm1 capture:", capture_raw);
                 } else {
-                    if (difference_value1 >
-                        difference_value2)  // 当前值与采样值波动较大，采用先前值滤波
-                    {
-                        current_pwm1_duty = 0.5 * current_pwm1_duty + 0.5 * previous_pwm1_duty;
-                    } else
-                        current_pwm1_duty =
-                            0.5 * current_pwm1_duty + 0.5 * raw_pwm1_duty;  // 否则采用采样值滤波
-
-                    previous_pwm1_duty = current_pwm1_duty;
+                    uart_print_u16("pwm2 capture:", capture_raw);
                 }
+                uart_print_u16("after filter:", control_state[i].input_value);
+#endif
+            }
+        } else {
+            // 本地控制模式：根据波段位置计算输出值
+            last_control_mode[i] = CONTROL_MODE_LOCAL;
+            pwm_value = apply_band_setting(control_state[i].band_position, PWM_FREQUENCY);
+            control_state[i].input_value = pwm_value;
+#if UART_PRINT
+            uart_print_u16("local mode output:", pwm_value);
+#endif
+        }
+
+        // 应用功率限制
+        control_state[i].output_value = apply_power_limit(control_state[i].power_limit, control_state[i].input_value);
+#if UART_PRINT
+        if (i == GL08_CHANNEL1) {
+            uart_print_u16("ch1 final output:", control_state[i].output_value);
+        } else {
+            uart_print_u16("ch2 final output:", control_state[i].output_value);
+        }
+#endif
+
+        // 输出PWM，抖动小于阈值时不输出
+        if (OUTPUT_NEED_UPDATE(control_state[i].input_value, control_state[i].output_value, PWM_OUTPUT_THRESHOLD)) {
+            if (i == GL08_CHANNEL1) {
+                set_pwm_duty(D1, control_state[i].output_value);
+            } else {
+                set_pwm_duty(D2, control_state[i].output_value);
             }
         }
-
-        last_raw_pwm1_duty = raw_pwm1_duty;
-
-        // 串口调试，可在gl08_config.h中通过宏 UART_PRINT 开启或关闭
-        uart_sendstr("PWM1 input raw value:");
-        uart_uint16(raw_pwm1_duty);
-        uart_sentEnter();
-
-        uart_sendstr("PWM1 input filter value:");
-        uart_uint16(control_data[0].channel_value);
-        uart_sentEnter();
-
-        uart_sentEnter();
     }
 
-    // 通道1为外部处理模式
-    if (control_data[1].control_mode == CONTROL_MODE_EXT) {
-        raw_pwm2_duty = get_pwm_ic_duty(PWM2);  // 获取 PWM2 的占空比（未处理值）
-
-        if (culculate_absolute_value(raw_pwm2_duty, current_pwm2_duty) >=
-            100)  // 认定为新值，外部发生档位变化
-        {
-            // last_raw_pwm2_duty = raw_pwm2_duty;
-            current_pwm2_duty = raw_pwm2_duty;
-            // previous_pwm2_duty = raw_pwm2_duty;
-            pwm2_level_off_flag = 0;
-        } else if (pwm2_level_off_flag == 0) {
-            if (culculate_absolute_value(raw_pwm2_duty, last_raw_pwm2_duty) == 0) {
-                pwm2_same_value_count++;
-            } else
-                pwm2_same_value_count = 0;
-
-            if (pwm2_same_value_count >=
-                3)  // 连续捕获三次相同值，认为已达到平稳转态，直接按捕获值输出
-            {
-                current_pwm2_duty = raw_pwm2_duty;
-                pwm2_level_off_flag = 1;
-            }
-
-            if (pwm2_level_off_flag == 0)  // 开始滤波算法
-            {
-                uint16_t difference_value1;
-                uint16_t difference_value2;
-
-                difference_value1 = culculate_absolute_value(current_pwm2_duty, raw_pwm2_duty);
-                difference_value2 = culculate_absolute_value(current_pwm2_duty, previous_pwm2_duty);
-
-                if (pwm2_filter_count <= 10) {
-                    if (difference_value1 <
-                        10)  // 刚开始采样，去除掉不合理值后，将采样值置为置信度更高的输入源
-                    {
-                        current_pwm2_duty = 0.4 * current_pwm2_duty + 0.6 * raw_pwm2_duty;
-                    } else {
-                        current_pwm2_duty = current_pwm2_duty;
-                        previous_pwm2_duty = previous_pwm2_duty;
-                    }
-
-                    pwm2_filter_count++;
-                } else {
-                    if (difference_value1 >
-                        difference_value2)  // 当前值与采样值波动较大，采用先前值滤波
-                    {
-                        current_pwm2_duty = 0.5 * current_pwm2_duty + 0.5 * previous_pwm2_duty;
-                    } else
-                        current_pwm2_duty =
-                            0.5 * current_pwm2_duty + 0.5 * raw_pwm2_duty;  // 否则采用采样值滤波
-
-                    previous_pwm2_duty = current_pwm2_duty;
-                }
-            }
-        }
-
-        last_raw_pwm2_duty = raw_pwm2_duty;
-
-        // 串口调试，可在gl08_config.h中通过宏 UART_PRINT 开启或关闭
-        uart_sendstr("PWM2 input raw value:");
-        uart_uint16(raw_pwm2_duty);
-        uart_sentEnter();
-
-        uart_sendstr("PWM2 input filter value:");
-        uart_uint16(control_data[1].channel_value);
-        uart_sentEnter();
-
-        uart_sentEnter();
-    }
-    // External panel control mode
-    control_data[0].channel_value = current_pwm1_duty;  // 更新当前占空比值到控制字
-    control_data[1].channel_value = current_pwm2_duty;
+    // 重新启动ADC转换和PWM捕获
+    adc_start_conversion();
+    pwma_ic1_start();
+    pwma_ic2_start();
 }
 
-// 处理获取到的波段档位信息
-void process_band_switch(void) {
-    control_data[0].band_position = band_switch_1_pos;
-    control_data[1].band_position = band_switch_2_pos;
+// 应用功率限制，根据功率档位计算功率限制后的值
+static uint16_t apply_power_limit(uint8_t power_limit, uint16_t value) {
+    switch (power_limit) {
+    case POWER_LIMIT_67:
+        return (uint16_t)((uint32_t)value * 667 / 1000);  // 66.7%
 
-    // 基于波段档位1（K1）设置通道1的控制模式
-    if (control_data[0].band_position == BAND_EXT) {
-        control_data[0].control_mode = CONTROL_MODE_EXT;
-        pwma_ic1_start();
-        EABLE_TIMER0();
-    } else {
-        control_data[0].control_mode = CONTROL_MODE_LOCAL;
-        pwma_ic1_stop();
-        DISABLE_TIMER0();
-    }
+    case POWER_LIMIT_83:
+        return (uint16_t)((uint32_t)value * 833 / 1000);  // 83.3%
 
-    // 基于波段档位2（K2）设置通道2的控制模式
-    if (control_data[1].band_position == BAND_EXT) {
-        control_data[1].control_mode = CONTROL_MODE_EXT;
-        pwma_ic2_start();
-        EABLE_TIMER1();
-    } else {
-        control_data[1].control_mode = CONTROL_MODE_LOCAL;
-        pwma_ic2_stop();
-        DISABLE_TIMER1();
-    }
-
-    // 串口调试，可在gl08_config.h中通过宏 UART_PRINT 开启或关闭
-    uart_sendstr("band1 control mode:");
-    uart_uint8(control_data[0].control_mode);
-    uart_sentEnter();
-
-    uart_sendstr("band2 control mode:");
-    uart_uint8(control_data[1].control_mode);
-    uart_sentEnter();
-
-    uart_sentEnter();
-}
-
-// 处理获取到的功率档位信息
-void process_power_switch(void) {
-    control_data[0].power_limit = power_switch_pos;
-    control_data[1].power_limit = power_switch_pos;
-
-    // 串口调试，可在gl08_config.h中通过宏 UART_PRINT 开启或关闭
-    uart_sendstr("power_limit:");
-    uart_uint8(control_data[0].power_limit);
-    uart_sentEnter();
-
-    uart_sentEnter();
-}
-
-// 更新通道输出
-void update_outputs(void) {
-    uint16_t ch1_output, ch2_output;
-
-    // Calculate output values
-    ch1_output = calculate_output_value(GL08_CH1);
-    ch2_output = calculate_output_value(GL08_CH2);
-
-    // Apply power limit
-    apply_power_limit(GL08_CH1, &ch1_output);
-    apply_power_limit(GL08_CH2, &ch2_output);
-
-    // Set outputs
-    set_pwm_duty(GL08_CH1, ch1_output);
-    set_pwm_duty(GL08_CH2, ch2_output);
-
-    // 串口调试，可在gl08_config.h中通过宏 UART_PRINT 开启或关闭
-    uart_sendstr("ch1 output:");
-    uart_uint16(ch1_output);
-    uart_sentEnter();
-
-    uart_sendstr("ch2 output:");
-    uart_uint16(ch2_output);
-    uart_sentEnter();
-
-    uart_sendstr("====== output end ======\r\n");
-
-    uart_sentEnter();
-}
-
-// 应用功率限制
-void apply_power_limit(uint8_t gl08_channel, uint16_t *value) {
-    uint8_t band_mode = get_control_mode(gl08_channel);
-
-    if (band_mode == CONTROL_MODE_LOCAL) {
-        switch (control_data[gl08_channel - 1].power_limit) {
-        case POWER_LIMIT_67:
-            *value = (uint16_t)((uint32_t)(*value) * 667 / 1000);  // 档位1，66.7%
-            break;
-        case POWER_LIMIT_83:
-            *value = (uint16_t)((uint32_t)(*value) * 833 / 1000);  // 档位2，88.3%
-            break;
-        case POWER_LIMIT_100:  // 档位3，100%
-        default:
-            // No power limit
-            break;
-        }
-    }
-}
-
-// 设置通道控制模式
-void set_control_mode(uint8_t gl08_channel, uint8_t mode) {
-    if (gl08_channel == GL08_CH1) {
-        if (mode <= CONTROL_MODE_EXT) {
-            control_data[0].control_mode = mode;
-        }
-    } else if (gl08_channel == GL08_CH2) {
-        if (mode <= CONTROL_MODE_EXT) {
-            control_data[1].control_mode = mode;
-        }
-    }
-}
-
-// 获取通道控制模式
-uint8_t get_control_mode(uint8_t gl08_channel) {
-    uint8_t band_mode = 0;
-
-    if (gl08_channel == GL08_CH1) {
-        band_mode = control_data[0].control_mode;
-    } else if (gl08_channel == GL08_CH2) {
-        band_mode = control_data[1].control_mode;
-    }
-
-    return band_mode;
-}
-
-// 计算通道PWM输出值
-uint16_t calculate_output_value(uint8_t pwm_channel) {
-    uint16_t output_value = 0;
-    uint8_t band_mode = 0;
-
-    band_mode = get_control_mode(pwm_channel);
-
-    switch (band_mode) {
-    case CONTROL_MODE_LOCAL:
-        // Local band switch control
-        output_value =
-            apply_band_setting(pwm_channel, PWM_FREQUENCY);  // Base PWM_FREQUENCY(1000) value
-        break;
-
-    case CONTROL_MODE_EXT:
-        // External panel control
-        if (pwm_channel == D1) {
-            output_value = control_data[0].channel_value;
-        } else if (pwm_channel == D2) {
-            output_value = control_data[1].channel_value;
-        }
-        break;
-
+    case POWER_LIMIT_100:
     default:
-        output_value = 0;
-        break;
+        return value;  // 100%，无功率限制
     }
-
-    return output_value;
 }
 
-// Apply band setting
-uint16_t apply_band_setting(uint8_t band_switch, uint16_t input_value) {
-    static uint16_t output_value = 0;
-    uint8_t band_poition = 0;
-
-    if (band_switch == K1) {
-        band_poition = control_data[0].band_position;
-    } else if (band_switch == K2) {
-        band_poition = control_data[1].band_position;
-    }
-
-    switch (band_poition) {
+// 应用波段设置，根据波段位置和量程计算输出值
+static uint16_t apply_band_setting(uint8_t band_position, uint16_t range) {
+    switch (band_position) {
     case BAND_0:
-        output_value = input_value * 0;  // 0%
-        break;
+        return range * 0;  // 0%
 
     case BAND_25:
-        output_value = input_value / 4;  // 25%
-        break;
+        return range >> 2;  // 25% (除以4)
 
     case BAND_50:
-        output_value = input_value / 2;  // 50%
-        break;
+        return range >> 1;  // 50% (除以2)
 
     case BAND_75:
-        output_value = input_value * 3 / 4;  // 75%
-        break;
+        return (range * 3) >> 2;  // 75% (乘以3除以4)
 
     case BAND_100:
-        output_value = input_value;  // 100%
-        break;
+        return range;  // 100%
 
     case BAND_EXT:
     default:
-        output_value = output_value;  // 档位未知，保持上次输出
-        break;
+        return 0;  // 外部档位或未知档位
     }
-
-    return output_value;
-}
-
-// 开始 ADC 转换，采集各个旋钮（波段、功率）的档位信息
-void collect_inputs(void) {
-    adc_values[ADC_CH1] = start_adc_conversion(BAND_SWITCH_1, CONSECUTIVE_CONV);
-    adc_values[ADC_CH2] = start_adc_conversion(BAND_SWITCH_2, CONSECUTIVE_CONV);
-    adc_values[ADC_CH3] = start_adc_conversion(POWER_SWITCH, CONSECUTIVE_CONV);
-
-    // 串口调试，可在gl08_config.h中通过宏 UART_PRINT 开启或关闭
-    uart_sendstr("band1 raw adc_value(0~1023):");
-    uart_uint16(adc_values[ADC_CH1]);
-    uart_sentEnter();
-
-    uart_sendstr("band2 raw adc_value(0~1023):");
-    uart_uint16(adc_values[ADC_CH2]);
-    uart_sentEnter();
-
-    uart_sendstr("power raw adc_value(0~1023):");
-    uart_uint16(adc_values[ADC_CH3]);
-    uart_sentEnter();
-
-    uart_sentEnter();
-}
-
-// 计算两数的差值（绝对值）
-uint16_t culculate_absolute_value(uint16_t value1, uint16_t value2) {
-    if (value1 > value2) {
-        return value1 - value2;
-    }
-
-    return value2 - value1;
 }

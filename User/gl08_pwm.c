@@ -1,21 +1,23 @@
-/*
- * GL08 PWM 模块
- * 负责 PWM 输出控制和输入捕获
+/**
+ * @file gl08_pwm.c
+ * @brief PWM模块实现
+ *
+ * @date 2026-02-07
  */
-
 #include "STC8H.h"
 #include "gl08_pwm.h"
 #include "uart.h"
 
-// 全局变量，存放输入捕获的占空比值
-volatile uint16_t pwm1_duty = 0;  // PWM1，端口P1.0
-volatile uint16_t pwm2_duty = 0;  // PWM2，端口P1.4
+// PWM捕获数据结构体
+typedef struct {
+    uint16_t rise_time;  // 上升沿时间
+    uint16_t fall_time;  // 下降沿时间
+    uint16_t duty;       // 占空比
+    uint8_t complete;    // 0: 捕获未完成，1: 捕获完成
+} pwm_capture_data_t;
 
-// 用于计算占空比的临时变量
-static uint16_t pwm1_rise_time = 0;
-static uint16_t pwm1_fall_time = 0;
-static uint16_t pwm2_rise_time = 0;
-static uint16_t pwm2_fall_time = 0;
+// PWM捕获数据存储
+static volatile pwm_capture_data_t pwm_capture_data[MAX_PWM_CHANNEL] = {0};
 
 // PWM 初始化
 void pwm_init(void) {
@@ -99,16 +101,23 @@ void set_pwm_duty(uint8_t channel, uint16_t duty) {
     }
 }
 
-// 动态获取输入捕获到的占空比值
+// 动态获取输入捕获到的占空比值，捕获完成返回值，未完成返回PWM_CAPTURE_NOT_READY
 uint16_t get_pwm_ic_duty(uint8_t channel) {
     if (channel == PWM1) {
-        return pwm1_duty;
+        if (pwm_capture_data[INPUT_PWM1].complete) {
+            return pwm_capture_data[INPUT_PWM1].duty;
+        }
+    } else if (channel == PWM2) {
+        if (pwm_capture_data[INPUT_PWM2].complete) {
+            return pwm_capture_data[INPUT_PWM2].duty;
+        }
     }
-    return pwm2_duty;
+    return PWM_CAPTURE_NOT_READY;
 }
 
 // 开始 CC1 和 CC2 双通道捕获，同时捕获P1.0引脚(PWM1)
 void pwma_ic1_start(void) {
+    pwm_capture_data[INPUT_PWM1].complete = 0;  // 清零完成标志
     PWMA_CCER1 |= 0x11;  // 使能CC1,CC2输入捕获
     PWMA_IER |= 0x06;    // 使能捕获中断
     PWMA_CR1 |= 0x01;    // 确保计数器运行
@@ -116,6 +125,7 @@ void pwma_ic1_start(void) {
 
 // 开始 CC3 和 CC4 双通道捕获，同时捕获P1.4引脚(PWM2)
 void pwma_ic2_start(void) {
+    pwm_capture_data[INPUT_PWM2].complete = 0;  // 清零完成标志
     PWMA_CCER2 |= 0x11;  // 使能CC3,CC4输入捕获
     PWMA_IER |= 0x18;    // 使能捕获中断
     PWMA_CR1 |= 0x01;    // 确保计数器运行
@@ -139,38 +149,46 @@ void pwma_ic2_stop(void) {
 void pwm_ic_isr(void) interrupt 26 {
     // 捕获PWM1
     if (PWMA_SR1 & 0x02) {  // CC1上升沿捕获
-        pwm1_rise_time = PWMA_CCR1;
+        pwm_capture_data[INPUT_PWM1].rise_time = PWMA_CCR1;
         PWMA_SR1 &= ~0x02;  // 清除中断标志位
     }
     if (PWMA_SR1 & 0x04) {  // CC2下降沿捕获
-        pwm1_fall_time = PWMA_CCR2;
+        pwm_capture_data[INPUT_PWM1].fall_time = PWMA_CCR2;
         DISABLE_TIMER0();
 
         // 计算高电平时间，周期不变，且PWM分频系数一样，高电平时间即为占空比
-        if (pwm1_fall_time >= pwm1_rise_time) {
-            pwm1_duty = pwm1_fall_time - pwm1_rise_time;
+        if (pwm_capture_data[INPUT_PWM1].fall_time >= pwm_capture_data[INPUT_PWM1].rise_time) {
+            pwm_capture_data[INPUT_PWM1].duty = pwm_capture_data[INPUT_PWM1].fall_time - pwm_capture_data[INPUT_PWM1].rise_time;
         } else {
-            pwm1_duty = (0xFFFF - pwm1_rise_time) + pwm1_fall_time;  // 考虑计数器溢出
+            pwm_capture_data[INPUT_PWM1].duty = (0xFFFF - pwm_capture_data[INPUT_PWM1].rise_time) + pwm_capture_data[INPUT_PWM1].fall_time;
         }
+        pwm_capture_data[INPUT_PWM1].complete = 1;
+
+        // 停止PWM1捕获
+        pwma_ic1_stop();
 
         PWMA_SR1 &= ~0x04;  // 清标志
     }
 
     // 捕获PWM2
     if (PWMA_SR1 & 0x08) {  // CC3上升沿捕获
-        pwm2_rise_time = PWMA_CCR3;
+        pwm_capture_data[INPUT_PWM2].rise_time = PWMA_CCR3;
         PWMA_SR1 &= ~0x08;
     }
     if (PWMA_SR1 & 0x10) {  // CC4下降沿捕获
-        pwm2_fall_time = PWMA_CCR4;
+        pwm_capture_data[INPUT_PWM2].fall_time = PWMA_CCR4;
         DISABLE_TIMER1();
 
         // 计算高电平时间，周期不变，且PWM分频系数一样，高电平时间即为占空比
-        if (pwm2_fall_time >= pwm2_rise_time) {
-            pwm2_duty = pwm2_fall_time - pwm2_rise_time;
+        if (pwm_capture_data[INPUT_PWM2].fall_time >= pwm_capture_data[INPUT_PWM2].rise_time) {
+            pwm_capture_data[INPUT_PWM2].duty = pwm_capture_data[INPUT_PWM2].fall_time - pwm_capture_data[INPUT_PWM2].rise_time;
         } else {
-            pwm2_duty = (0xFFFF - pwm2_rise_time) + pwm2_fall_time;  // 考虑计数器溢出
+            pwm_capture_data[INPUT_PWM2].duty = (0xFFFF - pwm_capture_data[INPUT_PWM2].rise_time) + pwm_capture_data[INPUT_PWM2].fall_time;
         }
+        pwm_capture_data[INPUT_PWM2].complete = 1;
+
+        // 停止PWM2捕获
+        pwma_ic2_stop();
 
         PWMA_SR1 &= ~0x10;
     }

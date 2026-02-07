@@ -7,8 +7,6 @@
 #include "type_def.h"
 #include "uart.h"
 
-#if UART_PRINT
-
 // 接收缓冲区与指针
 #define UART_BUF_SIZE 16
 uint8_t uart_buf[UART_BUF_SIZE];
@@ -34,6 +32,8 @@ void uart_init(void) {
     ES = 1;  // 使能串口1中断
 }
 
+#if UART_PRINT
+
 // UART 中断服务函数
 void uart_isr(void) interrupt 4 {
     if (TI) {  // 发送中断（数据发送完成）
@@ -47,7 +47,6 @@ void uart_isr(void) interrupt 4 {
     }
 }
 
-
 // 单字节发送（中断方式，非阻塞）
 void uart_send(uint8_t dat) {
     while (busy)
@@ -56,26 +55,58 @@ void uart_send(uint8_t dat) {
     SBUF = dat;  // 写入数据到发送缓冲
 }
 
-// 8位无符号数发送（目前只能打印0~9）
+// 8位无符号数发送（0~255）
 void uart_uint8(uint8_t dat) {
-    dat += '0';
-    while (busy)
-        ;        // 等待上一次发送完成
-    busy = 1;    // 标记为忙
-    SBUF = dat;  // 写入数据到发送缓冲
+    if (dat >= 100) {
+        uart_send(dat / 100 + '0');
+        dat %= 100;
+    }
+    if (dat >= 10) {
+        uart_send(dat / 10 + '0');
+        dat %= 10;
+    }
+    uart_send(dat + '0');
 }
 
-// 16位无符号数发送
+// 16位无符号数发送（0~65535）
 void uart_uint16(uint16_t dat) {
-    uint16_t temp = 10000;
-    uint8_t byte;
+    uint8_t started = 0;
+    uint16_t div = 10000;
+    
     do {
-        byte = dat / temp;
-        byte += '0';
-        uart_send(byte);
-        dat %= temp;
-        temp /= 10;
-    } while (temp);
+        uint8_t digit = dat / div;
+        dat %= div;
+        if (digit || started || div == 1) {
+            uart_send(digit + '0');
+            started = 1;
+        }
+        div /= 10;
+    } while (div);
+}
+
+// 8位无符号数16进制发送
+void uart_hex8(uint8_t dat) {
+    uint8_t nibble;
+    
+    nibble = (dat >> 4) & 0x0F;
+    uart_send(nibble + (nibble < 10 ? '0' : 'A' - 10));
+    
+    nibble = dat & 0x0F;
+    uart_send(nibble + (nibble < 10 ? '0' : 'A' - 10));
+}
+
+// 打印标签+16位数值+换行
+void uart_print_u16(const uint8_t *label, uint16_t value) {
+    uart_sendstr(label);
+    uart_uint16(value);
+    uart_sentEnter();
+}
+
+// 打印标签+8位数值+换行
+void uart_print_u8(const uint8_t *label, uint8_t value) {
+    uart_sendstr(label);
+    uart_uint8(value);
+    uart_sentEnter();
 }
 
 // 换行符发送
@@ -104,26 +135,6 @@ uint8_t uart_recv(void) {
 // 中断方式：判断缓冲区是否有数据（供上层逻辑轮询）
 uint8_t uarthasdata(void) {
     return (rptr != wptr);
-}
-
-
-#else  // 禁用串口打印时，空实现
-
-#define NOT_SUPPORTED 0
-
-void communication_init(void) {}
-void uart_init(void) {}
-void uart_isr(void) interrupt 4 {}
-void uart_send(uint8_t dat) {}
-void uart_uint8(uint8_t dat) {}
-void uart_uint16(uint16_t dat) {}
-void uart_sentEnter(void) {}
-void uart_sendstr(const uint8_t *str) {}
-uint8_t uart_recv(void) {
-    return NOT_SUPPORTED;
-}
-uint8_t uarthasdata(void) {
-    return NOT_SUPPORTED;
 }
 
 #endif  // UART_PRINT
