@@ -1,0 +1,24 @@
+{
+    "files.encoding": "utf8",
+    "files.autoGuessEncoding": true,
+    "editor.tabSize": 4,
+    "editor.insertSpaces": false,
+    "editor.detectIndentation": false,
+    "files.trimTrailingWhitespace": true,
+    "files.insertFinalNewline": true,
+    "C_Cpp.errorSquiggles": "disabled",
+    "C_Cpp.default.configurationProvider": "ms-vscode.makefile-tools",
+
+    "C_Cpp.clang_format_style": "file",
+    "C_Cpp.clang_format_sortIncludes": false,
+
+    "[c]": {
+        "editor.defaultFormatter": "ms-vscode.cpptools"
+    },
+    "[cpp]": {
+        "editor.defaultFormatter": "ms-vscode.cpptools"
+    },
+
+    "editor.formatOnSave": false,
+    "editor.formatOnPaste": false
+}

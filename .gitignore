@@ -2,7 +2,7 @@
 MDK/
 
 # VS Code directory
-.vscode/
+# .vscode/
 
 # Windows
 Thumbs.db

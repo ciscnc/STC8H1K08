@@ -1,0 +1,19 @@
+{
+    "configurations": [
+        {
+            "name": "STC8H1K",
+            "includePath": [
+                "${workspaceFolder}/**",
+                "${workspaceFolder}/User",
+                "${workspaceFolder}/Libaries"
+            ],
+            "defines": [],
+            "compilerPath": "",
+            "cStandard": "c99",
+            "cppStandard": "c++11",
+            "intelliSenseMode": "gcc-arm",
+            "compilerArgs": []
+        }
+    ],
+    "version": 4
+}
