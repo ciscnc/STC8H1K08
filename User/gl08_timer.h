@@ -19,4 +19,8 @@ void timer_init(void);
  */
 void Timer1_ISR(void);
 
+// Timer1 计数变量（用于调试）
+extern volatile uint16_t timer1_count;
+
 #endif /* __GL08_TIMER_H__ */
+

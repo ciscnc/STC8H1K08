@@ -10,6 +10,9 @@
 #include "gl08_hardware.h"
 #include "gl08_control.h"
 #include "task.h"
+#include "led.h"
+#include "gl08_timer.h"
+#include "uart.h"
 
 // Main function
 int main(void) {
@@ -23,11 +26,14 @@ int main(void) {
     // Hardware initialization
     hardware_init();
 
+    // LED initialization
+    led_init();
+
     // Control logic initialization
     control_init();
 
     // first start conversion
-    first_start_conversion();  
+    first_start_conversion();
 
     EA = 1;
 

@@ -82,7 +82,7 @@ void control_task(void) {
     uint8_t i;
 
 #if UART_PRINT
-    uart_sendstr("====== control task ======\r\n");
+    uart_sendstr("====== control task begin ======\r\n");
 #endif
 
     // 获取波段1 ADC值并转换为档位
@@ -180,6 +180,11 @@ void control_task(void) {
             }
         }
     }
+
+#if UART_PRINT
+    uart_sendstr("====== control task end ======\r\n");
+	uart_sentEnter();
+#endif
 
     // 重新启动ADC转换和PWM捕获
     adc_start_conversion();

@@ -7,6 +7,7 @@
 
 #include "task.h"
 #include "gl08_control.h"
+#include "led.h"
 
 // 任务结构体
 typedef struct {
@@ -18,11 +19,12 @@ typedef struct {
 
 // 任务注册表
 static TASK_COMPONENTS Task_Comps[] = {
-    {0, 5, 5, control_task},  // 状态位、计数器、周期、任务函数
+    {0, 5, 5, control_task},  // 5ms 周期，控制任务
+    {0, 1000, 1000, led_task},  // 1000ms 周期，LED 翻转任务
 };
 
 // 计算任务数量
-uint8_t Tasks_Max = sizeof(Task_Comps) / sizeof(Task_Comps[0]);
+static const uint8_t Tasks_Max = sizeof(Task_Comps) / sizeof(Task_Comps[0]);
 
 /**
  * @brief 任务标记回调函数

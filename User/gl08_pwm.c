@@ -154,7 +154,6 @@ void pwm_ic_isr(void) interrupt 26 {
     }
     if (PWMA_SR1 & 0x04) {  // CC2下降沿捕获
         pwm_capture_data[INPUT_PWM1].fall_time = PWMA_CCR2;
-        DISABLE_TIMER0();
 
         // 计算高电平时间，周期不变，且PWM分频系数一样，高电平时间即为占空比
         if (pwm_capture_data[INPUT_PWM1].fall_time >= pwm_capture_data[INPUT_PWM1].rise_time) {
@@ -177,7 +176,6 @@ void pwm_ic_isr(void) interrupt 26 {
     }
     if (PWMA_SR1 & 0x10) {  // CC4下降沿捕获
         pwm_capture_data[INPUT_PWM2].fall_time = PWMA_CCR4;
-        DISABLE_TIMER1();
 
         // 计算高电平时间，周期不变，且PWM分频系数一样，高电平时间即为占空比
         if (pwm_capture_data[INPUT_PWM2].fall_time >= pwm_capture_data[INPUT_PWM2].rise_time) {
