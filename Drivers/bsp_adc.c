@@ -7,7 +7,6 @@
 #include "STC8H.h"
 #include "bsp_adc.h"
 #include "bsp_delay.h"
-#include "bsp_uart.h"
 
 // ADC采样值存储
 static volatile uint16_t adc_raw_values[3] = {0, 0, 0};

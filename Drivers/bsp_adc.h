@@ -7,6 +7,8 @@
 #ifndef __BSP_ADC_H__
 #define __BSP_ADC_H__
 
+#include "STC8H.h"
+#include "type_def.h"
 #include "gl08_config.h"
 
 // ADC寄存器位定义
@@ -18,6 +20,9 @@
 #define ADC_CFG_ALIGN_RIGHT 0x00   // 结果右对齐
 #define ADC_CFG_ALIGN_LEFT  0x20   // 结果左对齐
 #define ADC_CFG_CLK_DIV_16  0x0F   // 时钟16分频
+
+// ADC配置常量
+#define ADC_RESOLUTION 1024  // 10位ADC分辨率
 
 // ADC通道枚举定义
 typedef enum

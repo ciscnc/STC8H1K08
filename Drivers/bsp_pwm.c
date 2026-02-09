@@ -6,7 +6,6 @@
  */
 #include "STC8H.h"
 #include "bsp_pwm.h"
-#include "bsp_uart.h"
 
 // PWM捕获数据结构体
 typedef struct {

@@ -5,7 +5,7 @@
  */
 #include "STC8H.h"
 #include "type_def.h"
-#include "Drivers/bsp_uart.h"
+#include "bsp_uart.h"
 #include "isp_trigger.h"
 
 // 静态变量：口令匹配状态（模块内私有）
