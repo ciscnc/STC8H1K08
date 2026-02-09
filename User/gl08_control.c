@@ -8,6 +8,7 @@
 #include "gl08_switch.h"
 #include "bsp_adc.h"
 #include "bsp_pwm.h"
+#include "bsp_uart.h"
 #include "filter.h"
 #include "gl08_config.h"
 

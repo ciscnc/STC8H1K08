@@ -9,12 +9,9 @@
 
 #include "gl08_config.h"
 
-// 包含各模块头文件
-#include "gl08_adc.h"
-#include "gl08_pwm.h"
-#include "gl08_timer.h"
-#include "gl08_gpio.h"
-#include "gl08_switch.h"
-#include "gl08_system.h"
+/**
+ * @brief 硬件初始化函数，配置所有硬件外设
+ */
+void hardware_init(void);
 
 #endif /* __GL08_HARDWARE_H__ */
