@@ -1,9 +1,10 @@
-/*
- * LED 闪烁模块头文件
+/**
+ * @file bsp_led.h
+ * @brief LED模块头文件
  */
 
-#ifndef __LED_H__
-#define __LED_H__
+#ifndef __BSP_LED_H__
+#define __BSP_LED_H__
 
 #include "type_def.h"
 
@@ -20,4 +21,4 @@ void led_init(void);
 void led_toggle(void);
 void led_task(void);
 
-#endif // __LED_H__
+#endif /* __BSP_LED_H__ */

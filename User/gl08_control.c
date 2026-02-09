@@ -6,10 +6,10 @@
 #include "gl08_control.h"
 #include "gl08_hardware.h"
 #include "gl08_switch.h"
-#include "gl08_adc.h"
-#include "gl08_pwm.h"
+#include "Drivers/bsp_adc.h"
+#include "Drivers/bsp_pwm.h"
 #include "filter.h"
-#include "uart.h"
+#include "Drivers/bsp_uart.h"
 
 #define DUTY_CNT_MAX PWM_FREQUENCY  // 占空比最大值
 #define DUTY_CNT_MIN 0     			// 占空比最小值

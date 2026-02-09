@@ -1,12 +1,12 @@
 /**
- * @file gl08_pwm.c
+ * @file bsp_pwm.c
  * @brief PWM模块实现
  *
  * @date 2026-02-07
  */
 #include "STC8H.h"
-#include "gl08_pwm.h"
-#include "uart.h"
+#include "bsp_pwm.h"
+#include "bsp_uart.h"
 
 // PWM捕获数据结构体
 typedef struct {

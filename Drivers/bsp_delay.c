@@ -1,10 +1,10 @@
 /**
- * @file delay.c
+ * @file bsp_delay.c
  * @brief 系统延时功能实现
  *
  * @date 2026-02-07
  */
-#include "delay.h"
+#include "bsp_delay.h"
 #include "STC8H.h"
 
 // 微秒延时，单位：us

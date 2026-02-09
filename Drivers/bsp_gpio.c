@@ -1,11 +1,11 @@
 /**
- * @file gl08_gpio.c
+ * @file bsp_gpio.c
  * @brief GPIO模块实现
  *
  * @date 2026-02-07
  */
 #include "STC8H.h"
-#include "gl08_gpio.h"
+#include "bsp_gpio.h"
 
 // GPIO 初始化
 void gpio_init(void) {

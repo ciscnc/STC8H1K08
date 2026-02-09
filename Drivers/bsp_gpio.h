@@ -1,11 +1,11 @@
 /**
- * @file gl08_gpio.h
+ * @file bsp_gpio.h
  * @brief GPIO模块头文件，实现GPIO初始化和操作
  *
  * @date 2026-02-07
  */
-#ifndef __GL08_GPIO_H__
-#define __GL08_GPIO_H__
+#ifndef __BSP_GPIO_H__
+#define __BSP_GPIO_H__
 
 #include "gl08_config.h"
 
@@ -14,4 +14,4 @@
  */
 void gpio_init(void);
 
-#endif /* __GL08_GPIO_H__ */
+#endif /* __BSP_GPIO_H__ */

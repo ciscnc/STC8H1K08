@@ -1,11 +1,12 @@
-/*
- * STC8H1K08 串口通信功能实现
- * 使用中断的方式进行发送和接收；包含8位，16位，字符串发送函数
+/**
+ * @file bsp_uart.c
+ * @brief 串口通信功能实现
+ * STC8H1K08 串口通信功能实现，使用中断的方式进行发送和接收；包含8位，16位，字符串发送函数
  */
 
 #include "STC8H.h"
 #include "type_def.h"
-#include "uart.h"
+#include "bsp_uart.h"
 
 // 接收缓冲区与指针
 #define UART_BUF_SIZE 16
@@ -133,7 +134,7 @@ void uart_sendstr(const uint8_t *str) {
 // 查询方式：读取接收缓冲区（非中断场景可用）
 uint8_t uart_recv(void) {
     uint8_t dat = 0;
-    uart_enter_critical();  // 临界区仅包裹“判断+读数据+改指针”
+    uart_enter_critical();  // 临界区仅包裹"判断+读数据+改指针"
     if (rptr != wptr) {
         dat = uart_buf[wptr++];
         wptr %= UART_BUF_SIZE;

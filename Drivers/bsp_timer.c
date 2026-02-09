@@ -1,11 +1,11 @@
 /**
- * @file gl08_timer.c
+ * @file bsp_timer.c
  * @brief 定时器模块实现
  *
  * @date 2026-02-07
  */
 #include "STC8H.h"
-#include "gl08_timer.h"
+#include "bsp_timer.h"
 #include "task.h"
 
 // Timer 配置

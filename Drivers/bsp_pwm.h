@@ -1,11 +1,11 @@
 /**
- * @file gl08_pwm.h
+ * @file bsp_pwm.h
  * @brief PWM模块头文件，实现PWM输出控制和输入捕获
  *
  * @date 2026-02-07
  */
-#ifndef __GL08_PWM_H__
-#define __GL08_PWM_H__
+#ifndef __BSP_PWM_H__
+#define __BSP_PWM_H__
 
 #include "gl08_config.h"
 
@@ -37,10 +37,10 @@
 #define PWM_CC4_FLAG  0x10   // CC4中断标志
 
 // PWM捕获通道枚举定义
-typedef enum { 
-    INPUT_PWM1 = 0, 
-    INPUT_PWM2, 
-    MAX_PWM_CHANNEL 
+typedef enum {
+    INPUT_PWM1 = 0,
+    INPUT_PWM2,
+    MAX_PWM_CHANNEL
 } pwm_capture_channel_t;
 
 /**
@@ -99,4 +99,4 @@ void pwma_ic2_stop(void);
  */
 void pwm_ic_isr(void);
 
-#endif /* __GL08_PWM_H__ */
+#endif /* __BSP_PWM_H__ */

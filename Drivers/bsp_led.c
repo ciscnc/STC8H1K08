@@ -1,10 +1,11 @@
-/*
- * LED 闪烁模块
+/**
+ * @file bsp_led.c
+ * @brief LED模块实现
  * P1.2 引脚，高电平亮，1s 翻转一次
  */
 
 #include "STC8H.h"
-#include "led.h"
+#include "bsp_led.h"
 
 // LED 初始化
 void led_init(void) {

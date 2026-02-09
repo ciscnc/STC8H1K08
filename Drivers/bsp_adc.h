@@ -1,11 +1,11 @@
 /**
- * @file gl08_adc.h
+ * @file bsp_adc.h
  * @brief ADC模块头文件，实现ADC采样和电压转换
  *
  * @date 2026-02-07
  */
-#ifndef __GL08_ADC_H__
-#define __GL08_ADC_H__
+#ifndef __BSP_ADC_H__
+#define __BSP_ADC_H__
 
 #include "gl08_config.h"
 
@@ -66,4 +66,4 @@ void adc_Isr(void);
 
 
 
-#endif /* __GL08_ADC_H__ */
+#endif /* __BSP_ADC_H__ */

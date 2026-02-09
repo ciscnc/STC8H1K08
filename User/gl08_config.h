@@ -8,8 +8,8 @@
 
 #include "STC8H.h"
 #include "type_def.h"
-#include "uart.h"
-#include "delay.h"
+#include "Drivers/bsp_uart.h"
+#include "Drivers/bsp_delay.h"
 
 
 // 系统配置

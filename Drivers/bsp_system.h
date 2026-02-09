@@ -1,11 +1,11 @@
 /**
- * @file gl08_system.h
+ * @file bsp_system.h
  * @brief 系统初始化头文件，实现系统和硬件初始化
  *
  * @date 2026-02-07
  */
-#ifndef __GL08_SYSTEM_H__
-#define __GL08_SYSTEM_H__
+#ifndef __BSP_SYSTEM_H__
+#define __BSP_SYSTEM_H__
 
 #include "type_def.h"
 
@@ -19,4 +19,4 @@ void system_init(void);
  */
 void hardware_init(void);
 
-#endif /* __GL08_SYSTEM_H__ */
+#endif /* __BSP_SYSTEM_H__ */

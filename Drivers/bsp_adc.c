@@ -1,13 +1,13 @@
 /**
- * @file gl08_adc.c
+ * @file bsp_adc.c
  * @brief ADC模块实现
  *
  * @date 2026-02-07
  */
 #include "STC8H.h"
-#include "gl08_adc.h"
-#include "delay.h"
-#include "uart.h"
+#include "bsp_adc.h"
+#include "bsp_delay.h"
+#include "bsp_uart.h"
 
 // ADC采样值存储
 static volatile uint16_t adc_raw_values[3] = {0, 0, 0};

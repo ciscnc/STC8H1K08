@@ -1,11 +1,11 @@
 /**
- * @file uart.h
+ * @file bsp_uart.h
  * @brief 串口通信头文件，实现UART通信功能
  *
  * @date 2026-02-07
  */
-#ifndef __UART_H__
-#define __UART_H__
+#ifndef __BSP_UART_H__
+#define __BSP_UART_H__
 
 #include "gl08_config.h"
 
@@ -90,4 +90,4 @@ uint8_t uart_recv(void);
  */
 uint8_t uarthasdata(void);
 
-#endif /* __UART_H__ */
+#endif /* __BSP_UART_H__ */

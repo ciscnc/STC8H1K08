@@ -10,9 +10,9 @@
 #include "gl08_hardware.h"
 #include "gl08_control.h"
 #include "task.h"
-#include "led.h"
-#include "gl08_timer.h"
-#include "uart.h"
+#include "Drivers/bsp_led.h"
+#include "Drivers/bsp_timer.h"
+#include "Drivers/bsp_uart.h"
 #include "isp_trigger.h"
 
 // Main function
