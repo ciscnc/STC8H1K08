@@ -9,7 +9,7 @@
 #include "bsp_delay.h"
 
 // ADC采样值存储
-static volatile uint16_t adc_raw_values[3] = {0, 0, 0};
+static data volatile uint16_t adc_raw_values[3] = {0, 0, 0};
 
 // ADC控制结构体
 typedef struct {
@@ -19,17 +19,17 @@ typedef struct {
     uint8_t  converting;        // 转换完成标志
 } adc_control_t;
 
-static adc_control_t adc_ctrl = {0};
+static data adc_control_t adc_ctrl = {0};
 
 // ADC通道映射表，方便根据枚举获取对应的ADC通道号
-static const uint8_t adc_channel_mapping[MAX_ADC_CHANNEL] = {
+static data const uint8_t adc_channel_mapping[MAX_ADC_CHANNEL] = {
     BAND_SWITCH_1,  // BAND_K1_ADC_CHANNEL
     BAND_SWITCH_2,  // BAND_K2_ADC_CHANNEL
     POWER_SWITCH   // POWER_ADC_CHANNEL
 };
 
 // 保存 ADC 中断使能状态
-static uint8_t adc_ie_backup;
+static data uint8_t adc_ie_backup;
 
 /**
  * @brief 进入ADC临界区（仅关闭ADC中断，不影响其他中断）

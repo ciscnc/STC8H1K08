@@ -78,19 +78,19 @@ typedef struct {
 } control_state_t;
 
 // Global control data
-control_state_t control_state[MAX_CHANNEL];  // 双通道，两个单独的控制结构体
+data control_state_t control_state[MAX_CHANNEL];  // 双通道，两个单独的控制结构体
 
 // PWM捕获滤波器数组
-static ewma_filter_t pwm_filters[MAX_CHANNEL];
+static data ewma_filter_t pwm_filters[MAX_CHANNEL];
 
 // 直流电平滤波器数组
-static dc_filter_state_t pwm_dc_filter[MAX_CHANNEL];
+static data dc_filter_state_t pwm_dc_filter[MAX_CHANNEL];
 
 // 占空比端点控制数组
-static duty_zone_ctrl_t pwm_zone[MAX_CHANNEL];
+static data duty_zone_ctrl_t pwm_zone[MAX_CHANNEL];
 
 // 上次控制模式，用于检测模式切换
-static uint8_t last_control_mode[MAX_CHANNEL];
+static data uint8_t last_control_mode[MAX_CHANNEL];
 
 // 内部函数声明
 static uint16_t apply_power_limit(uint8_t power_limit, uint16_t value);

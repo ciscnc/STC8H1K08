@@ -16,10 +16,10 @@ typedef struct {
 } pwm_capture_data_t;
 
 // PWM捕获数据存储
-static volatile pwm_capture_data_t pwm_capture_data[MAX_PWM_CHANNEL] = {0};
+static data volatile pwm_capture_data_t pwm_capture_data[MAX_PWM_CHANNEL] = {0};
 
 // 保存 PWM 捕获中断使能状态
-static uint8_t pwm_ie_backup;
+static data uint8_t pwm_ie_backup;
 
 // 只关 PWM1 捕获中断（CC1、CC2）
 static void pwm1_ic_enter(void) {
