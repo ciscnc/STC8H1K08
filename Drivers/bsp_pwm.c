@@ -74,7 +74,7 @@ void pwmb_oc_init(void) {
 // PWM输入捕获初始化
 void pwma_ic_init(void) {
     PWMA_PSCR = PWMA_PSC;  // 24分频，计数一个 TICK 为 1us
-    PWMA_ARR = 0xFFFF;     // 最大计数周期
+    PWMA_ARR = PWM_FREQUENCY - 1;  // 设置计数周期为999(1kHz PWM)
 
     PWMA_PS = 0x00;  // b5b4 = 00:PWM1P映射到P1.0；b1b0 = 00:PWM3P映射到P1.4
 

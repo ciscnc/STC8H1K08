@@ -107,13 +107,14 @@ void adc_start_conversion(uint8_t is_enforce) {
 
 // 获取ADC转换完成的raw值，转换完成返回值，未完成返回ADC_NOT_READY
 uint16_t adc_get_raw_value(adc_channel_t channel) {
-
     uint16_t value;
+
     adc_enter_critical();  // 进入ADC临界区，确保读取过程中ADC中断不会修改数据
     if (adc_ctrl.converting) {
-        return ADC_NOT_READY;
+        value = ADC_NOT_READY;
+    } else {
+        value = adc_raw_values[channel];
     }
-    value = adc_raw_values[channel];
     adc_exit_critical();  // 退出ADC临界区，恢复ADC中断状态
     return value;
 }
@@ -121,8 +122,11 @@ uint16_t adc_get_raw_value(adc_channel_t channel) {
 // ADC 中断服务函数
 void adc_Isr(void) interrupt 5 {
     if (ADC_CONTR & ADC_CONTR_FLAG) {
-        // 保存采样值
-        adc_ctrl.temp_values[adc_ctrl.round][adc_ctrl.channel] = ((uint16_t)ADC_RES << 8) | ADC_RESL;
+        // 读取ADC结果
+        uint16_t adc_result = ((uint16_t)ADC_RES << 8) | ADC_RESL;
+
+        // 保存采样值(只保留10位有效值)
+        adc_ctrl.temp_values[adc_ctrl.round][adc_ctrl.channel] = adc_result & 0x03FF;
 
         // 转换下一个通道
         adc_ctrl.channel++;

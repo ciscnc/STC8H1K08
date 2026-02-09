@@ -17,7 +17,7 @@
 
 // PWM滤波参数
 #define PWM_FILTER_DIE 10       // 滤波死区阈值
-#define PWM_FILTER_MAX_ERR 100  // 滤波限幅阈值
+#define PWM_FILTER_MAX_ERR 500  // 滤波限幅阈值(增大以允许更大的正常波动)
 #define PWM_FILTER_N 4          // 滤波长度N
 #define PWM_OUTPUT_THRESHOLD 5  // 输出抖动阈值
 
@@ -235,12 +235,16 @@ void control_task(void) {
             // 应用端点锁定
             target_value = apply_endpoint_lock(target_value, &pwm_zone[i]);
 
-            // 检测模式切换并复位滤波器
+            // 检测模式切换
             if (last_control_mode[i] != CONTROL_MODE_EXT) {
-                ewma_filter_reset(&pwm_filters[i], target_value);
+                // 模式切换时重置相关状态,但不重置滤波器
+                control_state[i].input_value = 0;  // 重置输入值
+                pwm_dc_filter[i].temp_level = 0;    // 重置直流滤波器
+                pwm_dc_filter[i].level_cnt = 0;
+                control_state[i].timeout = 0;      // 重置超时计数
                 last_control_mode[i] = CONTROL_MODE_EXT;
 #if UART_PRINT
-                uart_sendstr("mode switch to EXT, reset filter\r\n");
+                uart_sendstr("mode switch to EXT\r\n");
 #endif
             }
 
@@ -364,7 +368,7 @@ static uint16_t apply_endpoint_lock(uint16_t duty_in, duty_zone_ctrl_t* a) {
                 a->stable_cnt = 0;
                 return DUTY_CNT_MAX;  // 锁定为最大值
             }
-            return PWM_DUTY_HIGH_ENTER;
+            return duty_in;
         } else {
             a->stable_cnt = 0;
         }

@@ -17,8 +17,8 @@
 #define ADC_CONTR_FLAG   0x20   // ADC转换完成标志位
 #define ADC_CONTR_CH_MASK 0x0F  // ADC通道选择掩码
 
-#define ADC_CFG_ALIGN_RIGHT 0x00   // 结果右对齐
-#define ADC_CFG_ALIGN_LEFT  0x20   // 结果左对齐
+#define ADC_CFG_ALIGN_RIGHT 0x20   // 结果右对齐 (bit5=1)
+#define ADC_CFG_ALIGN_LEFT  0x00   // 结果左对齐
 #define ADC_CFG_CLK_DIV_16  0x0F   // 时钟16分频
 
 // ADC配置常量

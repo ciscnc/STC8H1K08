@@ -17,8 +17,8 @@ static uint8_t isp_match_idx = 0;                  // 口令匹配索引
  */
 void isp_trigger_init(void) {
     isp_match_idx = 0;  // 重置匹配索引
-    // 发送初始化提示（可选，方便调试）
-    uart_sendstr((uint8_t*)"ISP Trigger Module Init OK!\r\n");
+    // 注意:此处不能调用 uart_sendstr(),因为此时 EA=0,串口中断无法触发,会导致死锁
+    // 如需发送初始化提示,请在 main() 中 EA=1 后调用
 }
 
 /**
@@ -26,7 +26,7 @@ void isp_trigger_init(void) {
  */
 static void isp_enter(void) {
     // 发送触发成功提示（确保发送完成）
-    uart_sendstr((uint8_t*)"ISP Trigger OK! Enter ISP Mode...\r\n");
+    uart_sendstr("ISP Trigger OK! Enter ISP Mode...\r\n");
 
     // 关闭总中断，防止干扰ISP触发
     EA = 0;
