@@ -12,6 +12,30 @@
 // PWM捕获未完成标志
 #define PWM_CAPTURE_NOT_READY  0xFFFF
 
+// PWM捕获中断使能位掩码
+#define PWM_CC1_IE    0x02   // CC1中断使能位
+#define PWM_CC2_IE    0x04   // CC2中断使能位
+#define PWM_CC3_IE    0x08   // CC3中断使能位
+#define PWM_CC4_IE    0x10   // CC4中断使能位
+
+#define PWM_CC12_IE   (PWM_CC1_IE | PWM_CC2_IE)   // CC1+CC2中断使能
+#define PWM_CC34_IE   (PWM_CC3_IE | PWM_CC4_IE)   // CC3+CC4中断使能
+
+// PWM捕获/比较使能位掩码
+#define PWM_CC1_EN    0x01   // CC1捕获使能位
+#define PWM_CC2_EN    0x10   // CC2捕获使能位
+#define PWM_CC3_EN    0x01   // CC3捕获使能位
+#define PWM_CC4_EN    0x10   // CC4捕获使能位
+
+#define PWM_CC12_EN   (PWM_CC1_EN | PWM_CC2_EN)   // CC1+CC2捕获使能
+#define PWM_CC34_EN   (PWM_CC3_EN | PWM_CC4_EN)   // CC3+CC4捕获使能
+
+// PWM状态标志位掩码
+#define PWM_CC1_FLAG  0x02   // CC1中断标志
+#define PWM_CC2_FLAG  0x04   // CC2中断标志
+#define PWM_CC3_FLAG  0x08   // CC3中断标志
+#define PWM_CC4_FLAG  0x10   // CC4中断标志
+
 // PWM捕获通道枚举定义
 typedef enum { 
     INPUT_PWM1 = 0, 

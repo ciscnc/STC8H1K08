@@ -19,6 +19,29 @@ typedef struct {
 // PWM捕获数据存储
 static volatile pwm_capture_data_t pwm_capture_data[MAX_PWM_CHANNEL] = {0};
 
+// 保存 PWM 捕获中断使能状态
+static uint8_t pwm_ie_backup;
+
+// 只关 PWM1 捕获中断（CC1、CC2）
+static void pwm1_ic_enter(void) {
+    pwm_ie_backup = PWMA_IER;
+    PWMA_IER &= ~PWM_CC12_IE;  // 只关闭 CC1 + CC2 中断
+}
+
+static void pwm1_ic_exit(void) {
+    PWMA_IER = pwm_ie_backup;
+}
+
+// 只关 PWM2 捕获中断（CC3、CC4）
+static void pwm2_ic_enter(void) {
+    pwm_ie_backup = PWMA_IER;
+    PWMA_IER &= ~PWM_CC34_IE;  // 只关闭 CC3 + CC4 中断
+}
+
+static void pwm2_ic_exit(void) {
+    PWMA_IER = pwm_ie_backup;
+}
+
 // PWM 初始化
 void pwm_init(void) {
     pwmb_oc_init();  // PWMB输出模式初始化
@@ -103,56 +126,71 @@ void set_pwm_duty(uint8_t channel, uint16_t duty) {
 
 // 动态获取输入捕获到的占空比值，捕获完成返回值，未完成返回PWM_CAPTURE_NOT_READY
 uint16_t get_pwm_ic_duty(uint8_t channel) {
+    uint16_t ret = PWM_CAPTURE_NOT_READY;
+
     if (channel == PWM1) {
+        pwm1_ic_enter();  // 只关 PWM1 中断
         if (pwm_capture_data[INPUT_PWM1].complete) {
-            return pwm_capture_data[INPUT_PWM1].duty;
+            ret = pwm_capture_data[INPUT_PWM1].duty;
         }
+        pwm1_ic_exit();
     } else if (channel == PWM2) {
+        pwm2_ic_enter();  // 只关 PWM2 中断
         if (pwm_capture_data[INPUT_PWM2].complete) {
-            return pwm_capture_data[INPUT_PWM2].duty;
+            ret = pwm_capture_data[INPUT_PWM2].duty;
         }
+        pwm2_ic_exit();
     }
-    return PWM_CAPTURE_NOT_READY;
+
+    return ret;
 }
 
 // 开始 CC1 和 CC2 双通道捕获，同时捕获P1.0引脚(PWM1)
 void pwma_ic1_start(void) {
-    pwm_capture_data[INPUT_PWM1].complete = 0;  // 清零完成标志
-    PWMA_CCER1 |= 0x11;  // 使能CC1,CC2输入捕获
-    PWMA_IER |= 0x06;    // 使能捕获中断
+
+    pwm1_ic_enter();                            // 只关 PWM1
+    pwm_capture_data[INPUT_PWM1].complete = 0;  // 清零捕获完成标志
+    pwm1_ic_exit();
+
+    PWMA_CCER1 |= PWM_CC12_EN;  // 使能CC1,CC2输入捕获
+    PWMA_IER |= PWM_CC12_IE;    // 使能捕获中断
     PWMA_CR1 |= 0x01;    // 确保计数器运行
 }
 
 // 开始 CC3 和 CC4 双通道捕获，同时捕获P1.4引脚(PWM2)
 void pwma_ic2_start(void) {
-    pwm_capture_data[INPUT_PWM2].complete = 0;  // 清零完成标志
-    PWMA_CCER2 |= 0x11;  // 使能CC3,CC4输入捕获
-    PWMA_IER |= 0x18;    // 使能捕获中断
+
+    pwm2_ic_enter();                            // 只关 PWM2
+    pwm_capture_data[INPUT_PWM2].complete = 0;  // 清零捕获完成标志
+    pwm2_ic_exit();
+
+    PWMA_CCER2 |= PWM_CC34_EN;  // 使能CC3,CC4输入捕获
+    PWMA_IER |= PWM_CC34_IE;    // 使能捕获中断
     PWMA_CR1 |= 0x01;    // 确保计数器运行
 }
 
 // 停止捕获 PWM1
 void pwma_ic1_stop(void) {
-    PWMA_CCER1 &= ~0x11;  // 关闭CC1,CC2输入捕获
-    PWMA_IER &= ~0x06;    // 关闭捕获中断
+    PWMA_CCER1 &= ~PWM_CC12_EN;  // 关闭CC1,CC2输入捕获
+    PWMA_IER &= ~PWM_CC12_IE;    // 关闭捕获中断
     // 注意：这里不停止计数器，因为可能其他功能还在使用
 }
 
 // 停止捕获 PWM2
 void pwma_ic2_stop(void) {
-    PWMA_CCER2 &= ~0x11;  // 关闭CC3,CC4输入捕获
-    PWMA_IER &= ~0x18;    // 关闭捕获中断
+    PWMA_CCER2 &= ~PWM_CC34_EN;  // 关闭CC3,CC4输入捕获
+    PWMA_IER &= ~PWM_CC34_IE;    // 关闭捕获中断
     // 注意：这里不停止计数器，因为可能其他功能还在使用
 }
 
 // PWM 输入捕获中断服务函数
 void pwm_ic_isr(void) interrupt 26 {
     // 捕获PWM1
-    if (PWMA_SR1 & 0x02) {  // CC1上升沿捕获
+    if (PWMA_SR1 & PWM_CC1_FLAG) {  // CC1上升沿捕获
         pwm_capture_data[INPUT_PWM1].rise_time = PWMA_CCR1;
-        PWMA_SR1 &= ~0x02;  // 清除中断标志位
+        PWMA_SR1 &= ~PWM_CC1_FLAG;  // 清除中断标志位
     }
-    if (PWMA_SR1 & 0x04) {  // CC2下降沿捕获
+    if (PWMA_SR1 & PWM_CC2_FLAG) {  // CC2下降沿捕获
         pwm_capture_data[INPUT_PWM1].fall_time = PWMA_CCR2;
 
         // 计算高电平时间，周期不变，且PWM分频系数一样，高电平时间即为占空比
@@ -163,18 +201,18 @@ void pwm_ic_isr(void) interrupt 26 {
         }
         pwm_capture_data[INPUT_PWM1].complete = 1;
 
-        // 停止PWM1捕获
-        pwma_ic1_stop();
+        // 关闭PWM1捕获中断（不停止捕获）
+        PWMA_IER &= ~PWM_CC12_IE;  // 关闭 CC1 + CC2 中断
 
-        PWMA_SR1 &= ~0x04;  // 清标志
+        PWMA_SR1 &= ~PWM_CC2_FLAG;  // 清标志
     }
 
     // 捕获PWM2
-    if (PWMA_SR1 & 0x08) {  // CC3上升沿捕获
+    if (PWMA_SR1 & PWM_CC3_FLAG) {  // CC3上升沿捕获
         pwm_capture_data[INPUT_PWM2].rise_time = PWMA_CCR3;
-        PWMA_SR1 &= ~0x08;
+        PWMA_SR1 &= ~PWM_CC3_FLAG;
     }
-    if (PWMA_SR1 & 0x10) {  // CC4下降沿捕获
+    if (PWMA_SR1 & PWM_CC4_FLAG) {  // CC4下降沿捕获
         pwm_capture_data[INPUT_PWM2].fall_time = PWMA_CCR4;
 
         // 计算高电平时间，周期不变，且PWM分频系数一样，高电平时间即为占空比
@@ -185,9 +223,9 @@ void pwm_ic_isr(void) interrupt 26 {
         }
         pwm_capture_data[INPUT_PWM2].complete = 1;
 
-        // 停止PWM2捕获
-        pwma_ic2_stop();
+        // 关闭PWM2捕获中断（不停止捕获）
+        PWMA_IER &= ~PWM_CC34_IE;  // 关闭 CC3 + CC4 中断
 
-        PWMA_SR1 &= ~0x10;
+        PWMA_SR1 &= ~PWM_CC4_FLAG;
     }
 }
