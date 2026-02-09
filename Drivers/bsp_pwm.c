@@ -148,7 +148,9 @@ uint16_t get_pwm_ic_duty(uint8_t channel) {
 void pwma_ic1_start(void) {
 
     pwm1_ic_enter();                            // 只关 PWM1
-    pwm_capture_data[INPUT_PWM1].complete = 0;  // 清零捕获完成标志
+    if (pwm_capture_data[INPUT_PWM1].complete) {
+        pwm_capture_data[INPUT_PWM1].complete = 0;  // 只在捕获完成时清零标志
+    }
     pwm1_ic_exit();
 
     PWMA_CCER1 |= PWM_CC12_EN;  // 使能CC1,CC2输入捕获
@@ -160,7 +162,9 @@ void pwma_ic1_start(void) {
 void pwma_ic2_start(void) {
 
     pwm2_ic_enter();                            // 只关 PWM2
-    pwm_capture_data[INPUT_PWM2].complete = 0;  // 清零捕获完成标志
+    if (pwm_capture_data[INPUT_PWM2].complete) {
+        pwm_capture_data[INPUT_PWM2].complete = 0;  // 只在捕获完成时清零标志
+    }
     pwm2_ic_exit();
 
     PWMA_CCER2 |= PWM_CC34_EN;  // 使能CC3,CC4输入捕获

@@ -99,6 +99,7 @@ void adc_start_conversion(uint8_t is_enforce) {
     }
 
     // 启动第1轮第1个通道转换
+    EADC = 1;  // 开启ADC中断
     ADC_CONTR &= ~ADC_CONTR_CH_MASK;                      // 清除通道选择位
     ADC_CONTR |= adc_channel_mapping[adc_ctrl.channel];  // 设置通道
     ADC_CONTR |= ADC_CONTR_START;                         // 启动转换
@@ -143,6 +144,7 @@ void adc_Isr(void) interrupt 5 {
                 adc_raw_values[i] = (uint16_t)(sum >> 2);
             }
             adc_ctrl.converting = 0;
+            EADC = 0;  // 关闭ADC中断，避免数据未处理再进中断
         } else {
             // 启动下一个通道转换
             ADC_CONTR &= ~ADC_CONTR_CH_MASK;                      // 清除通道选择位
