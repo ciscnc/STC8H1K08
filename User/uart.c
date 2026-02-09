@@ -9,11 +9,19 @@
 
 // 接收缓冲区与指针
 #define UART_BUF_SIZE 16
-uint8_t uart_buf[UART_BUF_SIZE];
-uint8_t rptr = 0;           // 接收写入指针
-uint8_t wptr = 0;           // 接收读取指针（若需FIFO可扩展）
-volatile uint8_t busy = 0;  // 发送忙标志
+static uint8_t uart_buf[UART_BUF_SIZE];
+static uint8_t rptr = 0;           // 接收写入指针
+static uint8_t wptr = 0;           // 接收读取指针（若需FIFO可扩展）
+static volatile uint8_t busy = 0;  // 发送忙标志
 
+// 新增：串口临界区函数（保护缓冲区读写）
+static void uart_enter_critical(void) {
+    ES = 0;  // 关闭串口中断，防止改写缓冲区
+}
+
+static void uart_exit_critical(void) {
+    ES = 1;  // 恢复串口中断
+}
 
 // UART 初始化
 void uart_init(void) {
@@ -72,7 +80,7 @@ void uart_uint8(uint8_t dat) {
 void uart_uint16(uint16_t dat) {
     uint8_t started = 0;
     uint16_t div = 10000;
-    
+
     do {
         uint8_t digit = dat / div;
         dat %= div;
@@ -87,10 +95,10 @@ void uart_uint16(uint16_t dat) {
 // 8位无符号数16进制发送
 void uart_hex8(uint8_t dat) {
     uint8_t nibble;
-    
+
     nibble = (dat >> 4) & 0x0F;
     uart_send(nibble + (nibble < 10 ? '0' : 'A' - 10));
-    
+
     nibble = dat & 0x0F;
     uart_send(nibble + (nibble < 10 ? '0' : 'A' - 10));
 }
@@ -125,16 +133,22 @@ void uart_sendstr(const uint8_t *str) {
 // 查询方式：读取接收缓冲区（非中断场景可用）
 uint8_t uart_recv(void) {
     uint8_t dat = 0;
-    if (rptr != wptr) {  // 缓冲区有数据
+    uart_enter_critical();  // 临界区仅包裹“判断+读数据+改指针”
+    if (rptr != wptr) {
         dat = uart_buf[wptr++];
         wptr %= UART_BUF_SIZE;
     }
+    uart_exit_critical();
     return dat;
 }
 
 // 中断方式：判断缓冲区是否有数据（供上层逻辑轮询）
 uint8_t uarthasdata(void) {
-    return (rptr != wptr);
+    uint8_t ret;
+    uart_enter_critical();  // 仅关串口中断，几十纳秒
+    ret = (rptr != wptr);
+    uart_exit_critical();
+    return ret;
 }
 
 #endif  // UART_PRINT

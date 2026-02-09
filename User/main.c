@@ -13,9 +13,11 @@
 #include "led.h"
 #include "gl08_timer.h"
 #include "uart.h"
+#include "isp_trigger.h"
 
 // Main function
 int main(void) {
+
     EA = 0;
 
     EAXSFR();  // 使能访问XFR
@@ -34,6 +36,9 @@ int main(void) {
 
     // first start conversion
     first_start_conversion();
+
+	// ISP trigger initialization
+	isp_trigger_init();
 
     EA = 1;
 
