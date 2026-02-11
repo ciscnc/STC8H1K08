@@ -20,9 +20,9 @@ typedef struct {
 
 // 任务注册表
 static TASK_COMPONENTS Task_Comps[] = {
-	{0, 1, 1, isp_trigger_check},  // 1ms周期：ISP口令检测（优先级最高）
     {0, 5, 5, control_task},  // 5ms 周期，控制任务
     {0, 1000, 1000, led_task},  // 1000ms 周期，LED 翻转任务
+	{0, 1, 1, isp_trigger_check},  // 1ms周期：ISP口令检测（优先级最高）
 };
 
 // 计算任务数量
